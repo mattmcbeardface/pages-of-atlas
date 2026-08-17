@@ -1,0 +1,870 @@
+package com.pagesofatlas.mixin;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Pseudo;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Coerce;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+/**
+ * Pages of Atlas compatibility for Iris + Sodium terrain shaders.
+ *
+ * The physical atlas page travels through:
+ *
+ *   Fabric quad tag
+ *       ->
+ *   Sodium material bits 3-4
+ *       ->
+ *   Iris XHFP a_LightAndData.z bits 3-4
+ *
+ * This patch:
+ *
+ *   1. recovers the page number in the terrain vertex shader,
+ *   2. passes it flat to the fragment shader,
+ *   3. detects the shader pack's actual diffuse terrain sampler,
+ *   4. routes diffuse texture() and textureLod() calls to the
+ *      appropriate Pages of Atlas physical texture page.
+ *
+ * No shader-pack-specific sampler name is assumed.
+ */
+@Pseudo
+@Mixin(
+    targets =
+        "net.irisshaders.iris.pipeline.transform.TransformPatcher",
+    remap = false
+)
+public abstract class IrisTransformPatcherMixin {
+
+    private static final String[] DIFFUSE_SAMPLER_CANDIDATES = {
+        "tex",
+        "gtexture",
+        "texture",
+        "textureSampler",
+        "Sampler0",
+        "u_Texture",
+        "DiffuseSampler",
+        "gtexture",
+        "texture",
+        "u_MainSampler"
+    };
+
+    private static final Pattern SAMPLER_2D_PATTERN =
+        Pattern.compile(
+            "\\buniform\\s+sampler2D\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*;"
+        );
+
+    @Inject(
+        method = "patchSodium",
+        at = @At("RETURN"),
+        cancellable = true,
+        remap = false
+    )
+    private static void pagesofatlas$routePhysicalAtlasPage(
+        String vertex,
+        String geometry,
+        String tessControl,
+        String tessEval,
+        String fragment,
+        String name,
+        @Coerce Object alphaTest,
+        @Coerce Object textureMap,
+        boolean shadow,
+        CallbackInfoReturnable<Map<?, String>> cir
+    ) {
+        Map<?, String> original =
+            cir.getReturnValue();
+
+        if (original == null || original.isEmpty()) {
+            return;
+        }
+
+        Map<Object, String> patched =
+            new HashMap<>();
+
+        for (Map.Entry<?, String> entry : original.entrySet()) {
+            Object key =
+                entry.getKey();
+
+            String source =
+                entry.getValue();
+
+            if (source == null) {
+                patched.put(
+                    key,
+                    null
+                );
+
+                continue;
+            }
+
+            String stage =
+                String.valueOf(key)
+                    .toUpperCase();
+
+            if (stage.contains("VERTEX")) {
+                source =
+                    pagesofatlas$patchVertex(
+                        source
+                    );
+            }
+
+            if (stage.contains("FRAGMENT")) {
+                source =
+                    pagesofatlas$patchFragment(
+                        source
+                    );
+            }
+
+            patched.put(
+                key,
+                source
+            );
+        }
+
+        cir.setReturnValue(
+            patched
+        );
+    }
+
+    private static String pagesofatlas$patchVertex(
+        String source
+    ) {
+        if (!source.contains(
+                "flat out uint pagesofatlas_page;")) {
+
+            int main =
+                source.indexOf(
+                    "void main()"
+                );
+
+            if (main >= 0) {
+                source =
+                    source.substring(
+                        0,
+                        main
+                    )
+                    +
+                    "flat out uint pagesofatlas_page;\n"
+                    +
+                    source.substring(
+                        main
+                    );
+            }
+        }
+
+        String mainNeedle =
+            "void main() {";
+
+        String assignment =
+            "pagesofatlas_page = "
+            + "(a_LightAndData.z >> 3u) & 3u;";
+
+        if (
+            source.contains(mainNeedle)
+            &&
+            !source.contains(assignment)
+        ) {
+            source =
+                source.replace(
+                    mainNeedle,
+                    mainNeedle
+                    + "\n    "
+                    + assignment
+                );
+        }
+
+        return source;
+    }
+
+    private static String pagesofatlas$patchFragment(
+        String source
+    ) {
+        String diffuseSampler =
+            pagesofatlas$findDiffuseSampler(
+                source
+            );
+
+        /*
+         * If this transformed program does not expose a known
+         * terrain diffuse sampler, leave it alone.
+         *
+         * This prevents Pages of Atlas from injecting helpers
+         * into unrelated shader passes.
+         */
+        if (diffuseSampler == null) {
+            return source;
+        }
+
+        /*
+         * Rewrite only calls which actually use this program's
+         * detected terrain diffuse sampler.
+         *
+         * The helper functions are injected afterward so these
+         * replacements cannot recurse into their own bodies.
+         */
+        source =
+            pagesofatlas$replaceTextureCalls(
+                source,
+                diffuseSampler
+            );
+
+        /*
+         * Route Iris/OptiFine-style terrain PBR samplers.
+         *
+         * For this proof of concept only page 1 has its own
+         * normal/specular companion atlases.
+         */
+        source =
+            pagesofatlas$replacePbrTextureCalls(
+                source
+            );
+
+        source =
+            pagesofatlas$insertPbrHelpersEarly(
+                source
+            );
+
+        /*
+         * textureGrad() is commonly used from PBR/parallax utility
+         * functions which occur before main(). Put only this helper
+         * ahead of the first function that actually calls it.
+         */
+        source =
+            pagesofatlas$insertTextureGradHelperEarly(
+                source,
+                diffuseSampler
+            );
+
+        Matcher mainMatcher =
+            Pattern.compile(
+                "\\bvoid\\s+main\\s*\\("
+            ).matcher(source);
+
+        if (!mainMatcher.find()) {
+            return source;
+        }
+
+        int main =
+            mainMatcher.start();
+
+        StringBuilder injection =
+            new StringBuilder();
+
+
+        if (!source.contains(
+                "flat in uint pagesofatlas_page;")) {
+
+            injection.append(
+                "flat in uint pagesofatlas_page;\n"
+            );
+        }
+
+        if (!source.contains(
+                "uniform sampler2D u_BlockTex1;")) {
+
+            injection.append(
+                "uniform sampler2D u_BlockTex1;\n"
+            );
+        }
+
+        if (!source.contains(
+                "uniform sampler2D u_BlockTex2;")) {
+
+            injection.append(
+                "uniform sampler2D u_BlockTex2;\n"
+            );
+        }
+
+        if (!source.contains(
+                "uniform sampler2D u_BlockTex3;")) {
+
+            injection.append(
+                "uniform sampler2D u_BlockTex3;\n"
+            );
+        }
+
+        if (!source.contains(
+                "vec4 pagesofatlas_texture(vec2 uv)")) {
+
+            injection.append(
+                "\n"
+                + "vec4 pagesofatlas_texture(vec2 uv) {\n"
+                + "    if (pagesofatlas_page == 1u) {\n"
+                + "        return texture(u_BlockTex1, uv);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 2u) {\n"
+                + "        return texture(u_BlockTex2, uv);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 3u) {\n"
+                + "        return texture(u_BlockTex3, uv);\n"
+                + "    }\n"
+                + "    return texture("
+                + diffuseSampler
+                + ", uv);\n"
+                + "}\n\n"
+            );
+        }
+
+        if (!source.contains(
+                "vec4 pagesofatlas_texture(vec2 uv, float bias)")) {
+
+            injection.append(
+                "vec4 pagesofatlas_texture(vec2 uv, float bias) {\n"
+                + "    if (pagesofatlas_page == 1u) {\n"
+                + "        return texture(u_BlockTex1, uv, bias);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 2u) {\n"
+                + "        return texture(u_BlockTex2, uv, bias);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 3u) {\n"
+                + "        return texture(u_BlockTex3, uv, bias);\n"
+                + "    }\n"
+                + "    return texture("
+                + diffuseSampler
+                + ", uv, bias);\n"
+                + "}\n\n"
+            );
+        }
+
+
+        if (!source.contains(
+                "vec4 pagesofatlas_textureGrad(vec2 uv, vec2 dx, vec2 dy)")) {
+
+            injection.append(
+                "vec4 pagesofatlas_textureGrad(vec2 uv, vec2 dx, vec2 dy) {\n"
+                + "    if (pagesofatlas_page == 1u) {\n"
+                + "        return textureGrad(u_BlockTex1, uv, dx, dy);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 2u) {\n"
+                + "        return textureGrad(u_BlockTex2, uv, dx, dy);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 3u) {\n"
+                + "        return textureGrad(u_BlockTex3, uv, dx, dy);\n"
+                + "    }\n"
+                + "    return textureGrad("
+                + diffuseSampler
+                + ", uv, dx, dy);\n"
+                + "}\n\n"
+            );
+        }
+
+        if (!source.contains(
+                "vec4 pagesofatlas_textureLod(vec2 uv, float lod)")) {
+
+            injection.append(
+                "vec4 pagesofatlas_textureLod(vec2 uv, float lod) {\n"
+                + "    if (pagesofatlas_page == 1u) {\n"
+                + "        return textureLod(u_BlockTex1, uv, lod);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 2u) {\n"
+                + "        return textureLod(u_BlockTex2, uv, lod);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 3u) {\n"
+                + "        return textureLod(u_BlockTex3, uv, lod);\n"
+                + "    }\n"
+                + "    return textureLod("
+                + diffuseSampler
+                + ", uv, lod);\n"
+                + "}\n\n"
+            );
+        }
+
+        if (!injection.isEmpty()) {
+            source =
+                source.substring(0, main)
+                + injection
+                + source.substring(main);
+        }
+
+        return source;
+    }
+
+    private static String pagesofatlas$findDiffuseSampler(
+        String source
+    ) {
+        /*
+         * Prefer the canonical aliases Iris commonly uses for
+         * terrain diffuse sampling.
+         */
+        for (
+            String candidate :
+            DIFFUSE_SAMPLER_CANDIDATES
+        ) {
+            Pattern declaration =
+                Pattern.compile(
+                    "\\buniform\\s+sampler2D\\s+"
+                    + Pattern.quote(candidate)
+                    + "\\s*;"
+                );
+
+            if (
+                declaration.matcher(source)
+                    .find()
+            ) {
+                return candidate;
+            }
+        }
+
+        /*
+         * Do not guess from arbitrary sampler2D declarations.
+         *
+         * A terrain shader may also contain colortex, shadow,
+         * noise, normal and specular samplers. Routing those as
+         * page-zero would corrupt unrelated shader inputs.
+         */
+        Matcher matcher =
+            SAMPLER_2D_PATTERN.matcher(
+                source
+            );
+
+        while (matcher.find()) {
+            String name =
+                matcher.group(1);
+
+            if (
+                name.equals("u_BlockTex1")
+                ||
+                name.equals("u_BlockTex2")
+                ||
+                name.equals("u_BlockTex3")
+            ) {
+                continue;
+            }
+        }
+
+        return null;
+    }
+
+    private static String pagesofatlas$insertTextureGradHelperEarly(
+        String source,
+        String diffuseSampler
+    ) {
+        String call =
+            "pagesofatlas_textureGrad(";
+
+        int callIndex =
+            source.indexOf(call);
+
+        if (callIndex < 0) {
+            return source;
+        }
+
+        /*
+         * Find the last real GLSL function definition before the
+         * first routed textureGrad call. This identifies the utility
+         * function containing the call without moving declarations
+         * ahead of #version, structs, uniforms, etc.
+         */
+        Pattern functionPattern =
+            Pattern.compile(
+                "(?m)^[ \\t]*"
+                + "(?:[A-Za-z_][A-Za-z0-9_]*[ \\t]+)+"
+                + "[A-Za-z_][A-Za-z0-9_]*[ \\t]*"
+                + "\\([^;{}]*\\)[ \\t]*\\{"
+            );
+
+        Matcher matcher =
+            functionPattern.matcher(source);
+
+        int insertAt =
+            -1;
+
+        while (
+            matcher.find()
+            && matcher.start() < callIndex
+        ) {
+            insertAt =
+                matcher.start();
+        }
+
+        if (insertAt < 0) {
+            /*
+             * Better to leave the shader unchanged than inject into
+             * an unknown location.
+             */
+            return source;
+        }
+
+        StringBuilder early =
+            new StringBuilder();
+
+        if (!source.substring(0, insertAt).contains(
+                "flat in uint pagesofatlas_page;")) {
+
+            early.append(
+                "flat in uint pagesofatlas_page;\n"
+            );
+        }
+
+        if (!source.substring(0, insertAt).contains(
+                "uniform sampler2D u_BlockTex1;")) {
+
+            early.append(
+                "uniform sampler2D u_BlockTex1;\n"
+            );
+        }
+
+        if (!source.substring(0, insertAt).contains(
+                "uniform sampler2D u_BlockTex2;")) {
+
+            early.append(
+                "uniform sampler2D u_BlockTex2;\n"
+            );
+        }
+
+        if (!source.substring(0, insertAt).contains(
+                "uniform sampler2D u_BlockTex3;")) {
+
+            early.append(
+                "uniform sampler2D u_BlockTex3;\n"
+            );
+        }
+
+        early.append(
+            "\n"
+            + "vec4 pagesofatlas_textureGrad(vec2 uv, vec2 dx, vec2 dy) {\n"
+            + "    if (pagesofatlas_page == 1u) {\n"
+            + "        return textureGrad(u_BlockTex1, uv, dx, dy);\n"
+            + "    }\n"
+            + "    if (pagesofatlas_page == 2u) {\n"
+            + "        return textureGrad(u_BlockTex2, uv, dx, dy);\n"
+            + "    }\n"
+            + "    if (pagesofatlas_page == 3u) {\n"
+            + "        return textureGrad(u_BlockTex3, uv, dx, dy);\n"
+            + "    }\n"
+            + "    return textureGrad("
+            + diffuseSampler
+            + ", uv, dx, dy);\n"
+            + "}\n\n"
+        );
+
+        return source.substring(0, insertAt)
+            + early
+            + source.substring(insertAt);
+    }
+
+    private static String pagesofatlas$replacePbrTextureCalls(
+        String source
+    ) {
+        /*
+         * Only rewrite exact conventional terrain PBR samplers.
+         * Other shader-pack samplers remain untouched.
+         */
+        /*
+         * Modern GLSL normal-map sampling.
+         */
+        source =
+            source.replaceAll(
+                "\\btextureGrad\\s*\\(\\s*normals\\s*,",
+                "pagesofatlas_normalTextureGrad("
+            );
+
+        source =
+            source.replaceAll(
+                "\\btexture\\s*\\(\\s*normals\\s*,",
+                "pagesofatlas_normalTexture("
+            );
+
+        /*
+         * Compatibility-profile form used heavily by
+         * Complementary's material system.
+         */
+        source =
+            source.replaceAll(
+                "\\btexture2D\\s*\\(\\s*normals\\s*,",
+                "pagesofatlas_normalTexture("
+            );
+
+        /*
+         * Modern GLSL specular sampling.
+         */
+        source =
+            source.replaceAll(
+                "\\btexture\\s*\\(\\s*specular\\s*,",
+                "pagesofatlas_specularTexture("
+            );
+
+        /*
+         * Complementary uses texture2D() for its primary
+         * specular/material lookup.
+         */
+        source =
+            source.replaceAll(
+                "\\btexture2D\\s*\\(\\s*specular\\s*,",
+                "pagesofatlas_specularTexture("
+            );
+
+        /*
+         * Complementary's labPBR emission path explicitly samples
+         * LOD 0 to avoid mipmap-induced emission artifacts.
+         */
+        source =
+            source.replaceAll(
+                "\\btexture2DLod\\s*\\(\\s*specular\\s*,",
+                "pagesofatlas_specularTextureLod("
+            );
+
+        source =
+            source.replaceAll(
+                "\\btextureLod\\s*\\(\\s*specular\\s*,",
+                "pagesofatlas_specularTextureLod("
+            );
+
+        return source;
+    }
+
+    private static String pagesofatlas$insertPbrHelpersEarly(
+        String source
+    ) {
+        boolean routedNormal =
+            source.contains(
+                "pagesofatlas_normalTexture"
+            );
+
+        boolean routedSpecular =
+            source.contains(
+                "pagesofatlas_specularTexture"
+            );
+
+        if (!routedNormal && !routedSpecular) {
+            return source;
+        }
+
+        int callIndex =
+            Integer.MAX_VALUE;
+
+        int normalCall =
+            source.indexOf(
+                "pagesofatlas_normalTexture"
+            );
+
+        int specularCall =
+            source.indexOf(
+                "pagesofatlas_specularTexture"
+            );
+
+        if (normalCall >= 0) {
+            callIndex =
+                Math.min(
+                    callIndex,
+                    normalCall
+                );
+        }
+
+        if (specularCall >= 0) {
+            callIndex =
+                Math.min(
+                    callIndex,
+                    specularCall
+                );
+        }
+
+        Pattern functionPattern =
+            Pattern.compile(
+                "(?m)^[ \\t]*"
+                + "(?:[A-Za-z_][A-Za-z0-9_]*[ \\t]+)+"
+                + "[A-Za-z_][A-Za-z0-9_]*[ \\t]*"
+                + "\\([^;{}]*\\)[ \\t]*\\{"
+            );
+
+        Matcher matcher =
+            functionPattern.matcher(source);
+
+        int insertAt =
+            -1;
+
+        while (
+            matcher.find()
+            && matcher.start() < callIndex
+        ) {
+            insertAt =
+                matcher.start();
+        }
+
+        if (insertAt < 0) {
+            return source;
+        }
+
+        String before =
+            source.substring(
+                0,
+                insertAt
+            );
+
+        StringBuilder early =
+            new StringBuilder();
+
+        if (!before.contains(
+                "flat in uint pagesofatlas_page;")) {
+
+            early.append(
+                "flat in uint pagesofatlas_page;\n"
+            );
+        }
+
+        /*
+         * POA owns deterministic PBR companions for every physical
+         * diffuse page.
+         */
+        for (int page = 0; page < 4; page++) {
+
+            String normalDecl =
+                "uniform sampler2D u_BlockNormalTex"
+                    + page
+                    + ";";
+
+            if (!before.contains(normalDecl)) {
+                early.append(
+                    normalDecl
+                        + "\n"
+                );
+            }
+
+            String specularDecl =
+                "uniform sampler2D u_BlockSpecularTex"
+                    + page
+                    + ";";
+
+            if (!before.contains(specularDecl)) {
+                early.append(
+                    specularDecl
+                        + "\n"
+                );
+            }
+        }
+
+        early.append("\n");
+
+        if (routedNormal) {
+            early.append(
+                "vec4 pagesofatlas_normalTexture(vec2 uv) {\n"
+                + "    if (pagesofatlas_page == 0u) {\n"
+                + "        return texture(u_BlockNormalTex0, uv);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 1u) {\n"
+                + "        return texture(u_BlockNormalTex1, uv);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 2u) {\n"
+                + "        return texture(u_BlockNormalTex2, uv);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 3u) {\n"
+                + "        return texture(u_BlockNormalTex3, uv);\n"
+                + "    }\n"
+                + "    return texture(normals, uv);\n"
+                + "}\n\n"
+
+                + "vec4 pagesofatlas_normalTextureGrad(vec2 uv, vec2 dx, vec2 dy) {\n"
+                + "    if (pagesofatlas_page == 0u) {\n"
+                + "        return textureGrad(u_BlockNormalTex0, uv, dx, dy);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 1u) {\n"
+                + "        return textureGrad(u_BlockNormalTex1, uv, dx, dy);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 2u) {\n"
+                + "        return textureGrad(u_BlockNormalTex2, uv, dx, dy);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 3u) {\n"
+                + "        return textureGrad(u_BlockNormalTex3, uv, dx, dy);\n"
+                + "    }\n"
+                + "    return textureGrad(normals, uv, dx, dy);\n"
+                + "}\n\n"
+            );
+        }
+
+        if (routedSpecular) {
+            early.append(
+                "vec4 pagesofatlas_specularTexture(vec2 uv) {\n"
+                + "    if (pagesofatlas_page == 0u) {\n"
+                + "        return texture(u_BlockSpecularTex0, uv);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 1u) {\n"
+                + "        return texture(u_BlockSpecularTex1, uv);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 2u) {\n"
+                + "        return texture(u_BlockSpecularTex2, uv);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 3u) {\n"
+                + "        return texture(u_BlockSpecularTex3, uv);\n"
+                + "    }\n"
+                + "    return texture(specular, uv);\n"
+                + "}\n\n"
+
+                + "vec4 pagesofatlas_specularTextureLod(vec2 uv, float lod) {\n"
+                + "    if (pagesofatlas_page == 0u) {\n"
+                + "        return textureLod(u_BlockSpecularTex0, uv, lod);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 1u) {\n"
+                + "        return textureLod(u_BlockSpecularTex1, uv, lod);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 2u) {\n"
+                + "        return textureLod(u_BlockSpecularTex2, uv, lod);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 3u) {\n"
+                + "        return textureLod(u_BlockSpecularTex3, uv, lod);\n"
+                + "    }\n"
+                + "    return textureLod(specular, uv, lod);\n"
+                + "}\n\n"
+            );
+        }
+
+        return source.substring(
+                0,
+                insertAt
+            )
+            + early
+            + source.substring(
+                insertAt
+            );
+    }
+
+    private static String pagesofatlas$replaceTextureCalls(
+        String source,
+        String sampler
+    ) {
+        /*
+         * Whitespace-tolerant replacements:
+         *
+         * texture(tex, uv)
+         * texture ( tex , uv )
+         * textureLod(gtexture, uv, lod)
+         *
+         * all become Pages of Atlas routed calls.
+         */
+        String samplerPattern =
+            Pattern.quote(
+                sampler
+            );
+
+        source =
+            source.replaceAll(
+                "\\btextureGrad\\s*\\(\\s*"
+                + samplerPattern
+                + "\\s*,",
+                "pagesofatlas_textureGrad("
+            );
+
+        source =
+            source.replaceAll(
+                "\\btexture\\s*\\(\\s*"
+                + samplerPattern
+                + "\\s*,",
+                "pagesofatlas_texture("
+            );
+
+        source =
+            source.replaceAll(
+                "\\btextureLod\\s*\\(\\s*"
+                + samplerPattern
+                + "\\s*,",
+                "pagesofatlas_textureLod("
+            );
+
+        return source;
+    }
+}

@@ -1,0 +1,29 @@
+{
+  "required": true,
+  "package": "com.pagesofatlas.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "SpriteContentsAccessor",
+    "SpriteLoaderMixin",
+    "TextureAtlasMixin",
+    "TextureAtlasSpriteMixin",
+    "ChunkSectionLayerMixin",
+    "ChunkSectionsToRenderMixin",
+    "IndigoMutableQuadViewMixin",
+    "ContinuityQuadUtilMixin",
+    "ContinuityCtmSpriteFinderMixin",
+    "SodiumQuadViewImplMixin",
+    "SodiumMutableQuadViewWrapperMixin",
+    "SodiumBlockRendererMixin",
+    "IrisXHFPTerrainVertexMixin",
+    "IrisTransformPatcherMixin",
+    "SodiumShaderChunkRendererMixin",
+    "SodiumDefaultChunkRendererMixin",
+    "ItemFeatureRendererMixin",
+    "IrisProgramSamplersMixin",
+    "GlProgramMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

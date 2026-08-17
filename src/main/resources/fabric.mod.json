@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "pagesofatlas",
+  "version": "${version}",
+  "name": "Pages of Atlas",
+  "description": "Client-side support for splitting oversized Minecraft texture atlases across multiple GPU textures.",
+  "authors": [
+    "Matt"
+  ],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.pagesofatlas.PagesOfAtlasClient"
+    ]
+  },
+  "mixins": [
+    {
+      "config": "pagesofatlas.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": "~26.2",
+    "java": ">=25",
+    "fabric-api": "*"
+  },
+  "accessWidener": "pagesofatlas.accesswidener"
+}
