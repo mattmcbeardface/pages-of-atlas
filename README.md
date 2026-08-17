@@ -1,7 +1,6 @@
 # Pages of Atlas
 
-**Pages of Atlas** is a client-side Fabric mod for Minecraft that allows oversized
-texture atlases to be distributed across multiple physical GPU textures.
+**Pages of Atlas** is a Minecraft Fabric mod that enables ultra-high-resolution resource packs by transparently distributing oversized texture atlases across multiple physical atlas pages.
 
 It is designed for high-resolution resource packs whose combined texture atlas
 would otherwise exceed the maximum texture size supported by the user's GPU.
