@@ -3,7 +3,7 @@
   "id": "pagesofatlas",
   "version": "${version}",
   "name": "Pages of Atlas",
-  "description": "Client-side support for splitting oversized Minecraft texture atlases across multiple GPU textures.",
+  "description": "Client-side support for distributing oversized Minecraft texture atlases across multiple physical GPU texture pages.",
   "authors": [
     "Matt"
   ],
@@ -26,5 +26,6 @@
     "java": ">=25",
     "fabric-api": "*"
   },
-  "accessWidener": "pagesofatlas.accesswidener"
+  "accessWidener": "pagesofatlas.accesswidener",
+  "icon": "assets/pagesofatlas/icon.png"
 }
