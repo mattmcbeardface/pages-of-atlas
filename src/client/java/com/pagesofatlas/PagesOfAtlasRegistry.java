@@ -84,7 +84,7 @@ public final class PagesOfAtlasRegistry {
 
         if (atlas == null) {
             PagesOfAtlasClient.LOGGER.warn(
-                "Split atlas result produced without an active atlas"
+                "Pages of Atlas result produced without an active atlas"
             );
             return;
         }
@@ -155,7 +155,7 @@ public final class PagesOfAtlasRegistry {
         );
 
         PagesOfAtlasClient.LOGGER.info(
-            "Split atlas active: {} -> {} pages, {} sprites",
+            "Pages of Atlas active: {} -> {} pages, {} sprites",
             atlas,
             pagePlans.size(),
             spriteCount
