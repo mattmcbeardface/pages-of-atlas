@@ -305,9 +305,9 @@ public abstract class IrisTransformPatcherMixin {
                 + "    if (pagesofatlas_page == 3u) {\n"
                 + "        return textureLod(u_BlockTex3, uv, 0.0);\n"
                 + "    }\n"
-                + "    return textureLod("
+                + "    return texture("
                 + diffuseSampler
-                + ", uv, 0.0);\n"
+                + ", uv);\n"
                 + "}\n\n"
             );
         }
@@ -326,9 +326,9 @@ public abstract class IrisTransformPatcherMixin {
                 + "    if (pagesofatlas_page == 3u) {\n"
                 + "        return textureLod(u_BlockTex3, uv, 0.0);\n"
                 + "    }\n"
-                + "    return textureLod("
+                + "    return texture("
                 + diffuseSampler
-                + ", uv, 0.0);\n"
+                + ", uv, bias);\n"
                 + "}\n\n"
             );
         }
@@ -348,9 +348,9 @@ public abstract class IrisTransformPatcherMixin {
                 + "    if (pagesofatlas_page == 3u) {\n"
                 + "        return textureLod(u_BlockTex3, uv, 0.0);\n"
                 + "    }\n"
-                + "    return textureLod("
+                + "    return textureGrad("
                 + diffuseSampler
-                + ", uv, 0.0);\n"
+                + ", uv, dx, dy);\n"
                 + "}\n\n"
             );
         }
@@ -371,7 +371,7 @@ public abstract class IrisTransformPatcherMixin {
                 + "    }\n"
                 + "    return textureLod("
                 + diffuseSampler
-                + ", uv, 0.0);\n"
+                + ", uv, lod);\n"
                 + "}\n\n"
             );
         }
@@ -635,9 +635,9 @@ public abstract class IrisTransformPatcherMixin {
             + "    if (pagesofatlas_page == 3u) {\n"
             + "        return textureLod(u_BlockTex3, uv, 0.0);\n"
             + "    }\n"
-            + "    return textureLod("
+            + "    return textureGrad("
             + diffuseSampler
-            + ", uv, 0.0);\n"
+            + ", uv, dx, dy);\n"
             + "}\n\n"
         );
 

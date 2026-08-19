@@ -297,17 +297,17 @@ public abstract class IrisTransformPatcherMixin {
                 "\n"
                 + "vec4 pagesofatlas_texture(vec2 uv) {\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
-                + "        return textureLod(u_BlockTex1, uv, 0.0);\n"
+                + "        return texture(u_BlockTex1, uv);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 2u) {\n"
-                + "        return textureLod(u_BlockTex2, uv, 0.0);\n"
+                + "        return texture(u_BlockTex2, uv);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 3u) {\n"
-                + "        return textureLod(u_BlockTex3, uv, 0.0);\n"
+                + "        return texture(u_BlockTex3, uv);\n"
                 + "    }\n"
-                + "    return textureLod("
+                + "    return texture("
                 + diffuseSampler
-                + ", uv, 0.0);\n"
+                + ", uv);\n"
                 + "}\n\n"
             );
         }
@@ -318,17 +318,17 @@ public abstract class IrisTransformPatcherMixin {
             injection.append(
                 "vec4 pagesofatlas_texture(vec2 uv, float bias) {\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
-                + "        return textureLod(u_BlockTex1, uv, 0.0);\n"
+                + "        return texture(u_BlockTex1, uv, bias);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 2u) {\n"
-                + "        return textureLod(u_BlockTex2, uv, 0.0);\n"
+                + "        return texture(u_BlockTex2, uv, bias);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 3u) {\n"
-                + "        return textureLod(u_BlockTex3, uv, 0.0);\n"
+                + "        return texture(u_BlockTex3, uv, bias);\n"
                 + "    }\n"
-                + "    return textureLod("
+                + "    return texture("
                 + diffuseSampler
-                + ", uv, 0.0);\n"
+                + ", uv, bias);\n"
                 + "}\n\n"
             );
         }
@@ -340,17 +340,17 @@ public abstract class IrisTransformPatcherMixin {
             injection.append(
                 "vec4 pagesofatlas_textureGrad(vec2 uv, vec2 dx, vec2 dy) {\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
-                + "        return textureLod(u_BlockTex1, uv, 0.0);\n"
+                + "        return textureGrad(u_BlockTex1, uv, dx, dy);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 2u) {\n"
-                + "        return textureLod(u_BlockTex2, uv, 0.0);\n"
+                + "        return textureGrad(u_BlockTex2, uv, dx, dy);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 3u) {\n"
-                + "        return textureLod(u_BlockTex3, uv, 0.0);\n"
+                + "        return textureGrad(u_BlockTex3, uv, dx, dy);\n"
                 + "    }\n"
-                + "    return textureLod("
+                + "    return textureGrad("
                 + diffuseSampler
-                + ", uv, 0.0);\n"
+                + ", uv, dx, dy);\n"
                 + "}\n\n"
             );
         }
@@ -361,17 +361,17 @@ public abstract class IrisTransformPatcherMixin {
             injection.append(
                 "vec4 pagesofatlas_textureLod(vec2 uv, float lod) {\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
-                + "        return textureLod(u_BlockTex1, uv, 0.0);\n"
+                + "        return textureLod(u_BlockTex1, uv, lod);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 2u) {\n"
-                + "        return textureLod(u_BlockTex2, uv, 0.0);\n"
+                + "        return textureLod(u_BlockTex2, uv, lod);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 3u) {\n"
-                + "        return textureLod(u_BlockTex3, uv, 0.0);\n"
+                + "        return textureLod(u_BlockTex3, uv, lod);\n"
                 + "    }\n"
                 + "    return textureLod("
                 + diffuseSampler
-                + ", uv, 0.0);\n"
+                + ", uv, lod);\n"
                 + "}\n\n"
             );
         }
@@ -627,17 +627,17 @@ public abstract class IrisTransformPatcherMixin {
             "\n"
             + "vec4 pagesofatlas_textureGrad(vec2 uv, vec2 dx, vec2 dy) {\n"
             + "    if (pagesofatlas_page == 1u) {\n"
-            + "        return textureLod(u_BlockTex1, uv, 0.0);\n"
+            + "        return textureGrad(u_BlockTex1, uv, dx, dy);\n"
             + "    }\n"
             + "    if (pagesofatlas_page == 2u) {\n"
-            + "        return textureLod(u_BlockTex2, uv, 0.0);\n"
+            + "        return textureGrad(u_BlockTex2, uv, dx, dy);\n"
             + "    }\n"
             + "    if (pagesofatlas_page == 3u) {\n"
-            + "        return textureLod(u_BlockTex3, uv, 0.0);\n"
+            + "        return textureGrad(u_BlockTex3, uv, dx, dy);\n"
             + "    }\n"
-            + "    return textureLod("
+            + "    return textureGrad("
             + diffuseSampler
-            + ", uv, 0.0);\n"
+            + ", uv, dx, dy);\n"
             + "}\n\n"
         );
 
