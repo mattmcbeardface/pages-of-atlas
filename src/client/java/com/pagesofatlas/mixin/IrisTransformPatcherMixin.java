@@ -1,5 +1,9 @@
 package com.pagesofatlas.mixin;
 
+import com.pagesofatlas.PagesOfAtlasRegistry;
+
+import net.minecraft.client.renderer.texture.TextureAtlas;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -191,6 +195,40 @@ public abstract class IrisTransformPatcherMixin {
             );
 
         /*
+         * Use the same authoritative mip level that POA used when
+         * constructing the physical block-atlas pages.
+         *
+         * Do not ask GLSL to discover the mip count; some shader
+         * profiles used by Iris do not expose textureQueryLevels().
+         *
+         * If transformation somehow occurs before the upload bundle
+         * exists, fall back conservatively to mip 0.
+         */
+        int maxMipLevel =
+            PagesOfAtlasRegistry
+                .uploadBundle(
+                    TextureAtlas.LOCATION_BLOCKS
+                )
+                .map(
+                    bundle ->
+                        bundle.combined()
+                            .mipLevel()
+                )
+                .orElse(0);
+
+        maxMipLevel =
+            Math.max(
+                maxMipLevel,
+                0
+            );
+
+        String maxMipLiteral =
+            Integer.toString(
+                maxMipLevel
+            )
+            + ".0";
+
+        /*
          * If this transformed program does not expose a known
          * terrain diffuse sampler, leave it alone.
          *
@@ -304,7 +342,9 @@ public abstract class IrisTransformPatcherMixin {
                 + "        vec2 pagesofatlas_dy_texel = pagesofatlas_dy * pagesofatlas_size;\n"
                 + "        float pagesofatlas_rho = max(length(pagesofatlas_dx_texel), length(pagesofatlas_dy_texel));\n"
                 + "        float pagesofatlas_lod = log2(max(pagesofatlas_rho, 1.0));\n"
-                + "        return textureLod(u_BlockTex1, uv, clamp(pagesofatlas_lod, 0.0, 4.0));\n"
+                + "        return textureLod(u_BlockTex1, uv, clamp(pagesofatlas_lod, 0.0, "
+                + maxMipLiteral
+                + "));\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 2u) {\n"
                 + "        vec2 pagesofatlas_size = vec2(textureSize(u_BlockTex2, 0));\n"
@@ -312,7 +352,9 @@ public abstract class IrisTransformPatcherMixin {
                 + "        vec2 pagesofatlas_dy_texel = pagesofatlas_dy * pagesofatlas_size;\n"
                 + "        float pagesofatlas_rho = max(length(pagesofatlas_dx_texel), length(pagesofatlas_dy_texel));\n"
                 + "        float pagesofatlas_lod = log2(max(pagesofatlas_rho, 1.0));\n"
-                + "        return textureLod(u_BlockTex2, uv, clamp(pagesofatlas_lod, 0.0, 4.0));\n"
+                + "        return textureLod(u_BlockTex2, uv, clamp(pagesofatlas_lod, 0.0, "
+                + maxMipLiteral
+                + "));\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 3u) {\n"
                 + "        vec2 pagesofatlas_size = vec2(textureSize(u_BlockTex3, 0));\n"
@@ -320,7 +362,9 @@ public abstract class IrisTransformPatcherMixin {
                 + "        vec2 pagesofatlas_dy_texel = pagesofatlas_dy * pagesofatlas_size;\n"
                 + "        float pagesofatlas_rho = max(length(pagesofatlas_dx_texel), length(pagesofatlas_dy_texel));\n"
                 + "        float pagesofatlas_lod = log2(max(pagesofatlas_rho, 1.0));\n"
-                + "        return textureLod(u_BlockTex3, uv, clamp(pagesofatlas_lod, 0.0, 4.0));\n"
+                + "        return textureLod(u_BlockTex3, uv, clamp(pagesofatlas_lod, 0.0, "
+                + maxMipLiteral
+                + "));\n"
                 + "    }\n"
                 + "    vec2 pagesofatlas_size = vec2(textureSize("
                 + diffuseSampler
@@ -332,7 +376,9 @@ public abstract class IrisTransformPatcherMixin {
 
                 + "    return textureLod("
                 + diffuseSampler
-                + ", uv, clamp(pagesofatlas_lod, 0.0, 4.0));\n"
+                + ", uv, clamp(pagesofatlas_lod, 0.0, "
+                + maxMipLiteral
+                + "));\n"
                 + "}\n\n"
             );
         }
