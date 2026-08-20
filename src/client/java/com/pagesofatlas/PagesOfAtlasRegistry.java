@@ -125,32 +125,6 @@ public final class PagesOfAtlasRegistry {
                     )
                 );
 
-                /*
-                 * DIAGNOSTIC BUILD:
-                 * Report terrain sprites relevant to the current
-                 * distance-corruption investigation.
-                 */
-                String poaDebugSprite =
-                    sprite.toString()
-                        .toLowerCase();
-
-                if (
-                    poaDebugSprite.contains("sand")
-                    || poaDebugSprite.contains("grass")
-                    || poaDebugSprite.contains("dirt")
-                ) {
-                    PagesOfAtlasClient.LOGGER.info(
-                        "[PLACEMENT DEBUG] {} -> page={} atlas={}x{} slot={},{} padding={}",
-                        sprite,
-                        placement.page(),
-                        page.width(),
-                        page.height(),
-                        placement.x(),
-                        placement.y(),
-                        placement.padding()
-                    );
-                }
-
                 spriteCount++;
             }
 

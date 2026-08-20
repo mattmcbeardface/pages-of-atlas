@@ -253,16 +253,12 @@ public abstract class IrisTransformPatcherMixin {
             );
 
         /*
-         * DIAGNOSTIC BUILD:
+         * Preserve shader-pack normal/specular/POM sampling.
          *
-         * Leave shader-pack normal/specular/POM sampling completely
-         * untouched.
-         *
-         * Pages of Atlas continues routing only diffuse terrain
-         * atlas pages.
-         *
-         * This isolates the 0.3.2 deterministic PBR companion system
-         * as a possible regression source.
+         * POA currently routes only diffuse terrain sampling here.
+         * PBR companion routing remains disabled until it can be
+         * reintroduced without altering shader-pack material
+         * semantics or exhausting texture units.
          */
         source =
             pagesofatlas$ensureFragmentGlobals(

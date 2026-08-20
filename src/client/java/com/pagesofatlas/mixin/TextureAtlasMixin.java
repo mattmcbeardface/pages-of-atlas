@@ -65,16 +65,12 @@ public abstract class TextureAtlasMixin {
      * Pages 0, 2 and 3 continue using vanilla behavior.
      */
     /*
-     * DIAGNOSTIC BUILD:
+     * Physical POA pages currently use Minecraft's normal
+     * uploadInitialContents() path.
      *
-     * Disable the experimental page-1 direct uploader.
-     *
-     * Do not cancel uploadInitialContents(); every POA physical
-     * diffuse page will therefore use Minecraft's normal atlas
-     * upload path.
-     *
-     * This isolates PagesOfAtlasDirectUploader as a possible source
-     * of incorrect lower mip levels / distance-dependent corruption.
+     * The experimental direct uploader remains disabled until its
+     * memory benefits can be validated independently from shader
+     * compatibility.
      */
     @Inject(
         method = "uploadInitialContents",
