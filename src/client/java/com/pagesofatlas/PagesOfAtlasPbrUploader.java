@@ -89,6 +89,12 @@ public final class PagesOfAtlasPbrUploader {
         ) {
             /*
              * NORMAL
+             *
+             * Batch every neutral normal stripe into one command
+             * encoder and submit once for the complete page.
+             *
+             * Keep both the reusable full stripe and any possible
+             * short final stripe alive until submit().
              */
             stripe.fillRect(
                 0,
@@ -98,45 +104,51 @@ public final class PagesOfAtlasPbrUploader {
                 DEFAULT_NORMAL
             );
 
-            for (
-                int y = 0;
-                y < page.height();
-                y += stripeHeight
-            ) {
-                int remaining =
-                    Math.min(
-                        stripeHeight,
-                        page.height() - y
-                    );
+            NativeImage shortNormalStripe = null;
 
-                NativeImage uploadStripe =
-                    stripe;
+            try {
+                CommandEncoder encoder =
+                    RenderSystem.getDevice()
+                        .createCommandEncoder();
 
-                /*
-                 * Page heights are normally multiples of 256.
-                 * Handle a possible short final stripe safely.
-                 */
-                if (remaining != stripe.getHeight()) {
-                    uploadStripe =
-                        new NativeImage(
-                            page.width(),
-                            remaining,
-                            false
+                for (
+                    int y = 0;
+                    y < page.height();
+                    y += stripeHeight
+                ) {
+                    int remaining =
+                        Math.min(
+                            stripeHeight,
+                            page.height() - y
                         );
 
-                    uploadStripe.fillRect(
-                        0,
-                        0,
-                        uploadStripe.getWidth(),
-                        uploadStripe.getHeight(),
-                        DEFAULT_NORMAL
-                    );
-                }
+                    NativeImage uploadStripe =
+                        stripe;
 
-                try {
-                    CommandEncoder encoder =
-                        RenderSystem.getDevice()
-                            .createCommandEncoder();
+                    /*
+                     * Page heights are normally multiples of 256,
+                     * but retain safe handling for a short final
+                     * stripe.
+                     */
+                    if (remaining != stripe.getHeight()) {
+                        shortNormalStripe =
+                            new NativeImage(
+                                page.width(),
+                                remaining,
+                                false
+                            );
+
+                        shortNormalStripe.fillRect(
+                            0,
+                            0,
+                            shortNormalStripe.getWidth(),
+                            shortNormalStripe.getHeight(),
+                            DEFAULT_NORMAL
+                        );
+
+                        uploadStripe =
+                            shortNormalStripe;
+                    }
 
                     encoder.writeToTexture(
                         page.normalTexture(),
@@ -146,18 +158,21 @@ public final class PagesOfAtlasPbrUploader {
                         0,
                         y
                     );
+                }
 
-                    encoder.submit();
+                encoder.submit();
 
-                } finally {
-                    if (uploadStripe != stripe) {
-                        uploadStripe.close();
-                    }
+            } finally {
+                if (shortNormalStripe != null) {
+                    shortNormalStripe.close();
                 }
             }
 
             /*
-             * SPECULAR
+             * The normal upload has now been submitted, so it is
+             * safe to reuse and recolor the stripe for SPECULAR.
+             *
+             * Again, queue every stripe first and submit only once.
              */
             stripe.fillRect(
                 0,
@@ -167,41 +182,46 @@ public final class PagesOfAtlasPbrUploader {
                 DEFAULT_SPECULAR
             );
 
-            for (
-                int y = 0;
-                y < page.height();
-                y += stripeHeight
-            ) {
-                int remaining =
-                    Math.min(
-                        stripeHeight,
-                        page.height() - y
-                    );
+            NativeImage shortSpecularStripe = null;
 
-                NativeImage uploadStripe =
-                    stripe;
+            try {
+                CommandEncoder encoder =
+                    RenderSystem.getDevice()
+                        .createCommandEncoder();
 
-                if (remaining != stripe.getHeight()) {
-                    uploadStripe =
-                        new NativeImage(
-                            page.width(),
-                            remaining,
-                            false
+                for (
+                    int y = 0;
+                    y < page.height();
+                    y += stripeHeight
+                ) {
+                    int remaining =
+                        Math.min(
+                            stripeHeight,
+                            page.height() - y
                         );
 
-                    uploadStripe.fillRect(
-                        0,
-                        0,
-                        uploadStripe.getWidth(),
-                        uploadStripe.getHeight(),
-                        DEFAULT_SPECULAR
-                    );
-                }
+                    NativeImage uploadStripe =
+                        stripe;
 
-                try {
-                    CommandEncoder encoder =
-                        RenderSystem.getDevice()
-                            .createCommandEncoder();
+                    if (remaining != stripe.getHeight()) {
+                        shortSpecularStripe =
+                            new NativeImage(
+                                page.width(),
+                                remaining,
+                                false
+                            );
+
+                        shortSpecularStripe.fillRect(
+                            0,
+                            0,
+                            shortSpecularStripe.getWidth(),
+                            shortSpecularStripe.getHeight(),
+                            DEFAULT_SPECULAR
+                        );
+
+                        uploadStripe =
+                            shortSpecularStripe;
+                    }
 
                     encoder.writeToTexture(
                         page.specularTexture(),
@@ -211,13 +231,13 @@ public final class PagesOfAtlasPbrUploader {
                         0,
                         y
                     );
+                }
 
-                    encoder.submit();
+                encoder.submit();
 
-                } finally {
-                    if (uploadStripe != stripe) {
-                        uploadStripe.close();
-                    }
+            } finally {
+                if (shortSpecularStripe != null) {
+                    shortSpecularStripe.close();
                 }
             }
         }
