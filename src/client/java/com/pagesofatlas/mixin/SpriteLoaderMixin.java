@@ -149,6 +149,17 @@ public abstract class SpriteLoaderMixin {
                     4
                 );
 
+        PagesOfAtlasClient.LOGGER.info(
+            "[FILTER DEBUG] atlas={} filtering={} anisotropyBit={} mipLevel={} padding={} maxTextureSize={} sprites={}",
+            location,
+            options.textureFiltering().get(),
+            anisotropyBit,
+            mipLevel,
+            padding,
+            maxSupportedTextureSize,
+            sprites.size()
+        );
+
         PagesOfAtlasPager.Result<SpriteContents>
             result;
 

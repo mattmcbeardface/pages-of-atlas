@@ -70,12 +70,12 @@ public abstract class IrisTransformPatcherMixin {
         remap = false
     )
     private static void pagesofatlas$routePhysicalAtlasPage(
+        String name,
         String vertex,
         String geometry,
         String tessControl,
         String tessEval,
         String fragment,
-        String name,
         @Coerce Object alphaTest,
         @Coerce Object textureMap,
         boolean shadow,
@@ -111,18 +111,215 @@ public abstract class IrisTransformPatcherMixin {
                 String.valueOf(key)
                     .toUpperCase();
 
+            /*
+             * TEMP DIAGNOSTIC:
+             *
+             * Iris patchSodium() gives us the program name for the
+             * complete shader-stage set. Log that identity instead
+             * of trying to correlate vertex/fragment dumps by time.
+             */
+            com.pagesofatlas.PagesOfAtlasClient.LOGGER.info(
+                "[IRIS PROGRAM] name={} stage={} hash={} chars={}",
+                name,
+                stage,
+                Integer.toHexString(source.hashCode()),
+                source.length()
+            );
+
+            /*
+             * Bliss terrain fragments expose this sprite metadata.
+             * Flag the owning Iris program so its matching vertex
+             * shader can be identified unambiguously.
+             */
+            if (
+                stage.contains("FRAGMENT")
+                &&
+                source.contains("flat in vec2 midCoord;")
+                &&
+                source.contains("in vec4 spriteBounds;")
+                &&
+                source.contains("absMidCoordPos")
+            ) {
+                com.pagesofatlas.PagesOfAtlasClient.LOGGER.info(
+                    "[IRIS PROGRAM TARGET] name={} stage={} hash={} "
+                        + "hasTextureAF={} hasTexSampler={}",
+                    name,
+                    stage,
+                    Integer.toHexString(source.hashCode()),
+                    source.contains("textureAF"),
+                    source.contains("texSampler")
+                );
+            }
+
             if (stage.contains("VERTEX")) {
+                try {
+                    java.nio.file.Path dumpDir =
+                        net.minecraft.client.Minecraft
+                            .getInstance()
+                            .gameDirectory
+                            .toPath()
+                            .resolve(
+                                "pagesofatlas-shader-dumps"
+                            );
+
+                    java.nio.file.Files.createDirectories(
+                        dumpDir
+                    );
+
+                    String safeName =
+                        "shader-"
+                            + Integer.toHexString(
+                                source.hashCode()
+                            );
+
+                    java.nio.file.Files.writeString(
+                        dumpDir.resolve(
+                            safeName
+                                + "-before-poa.vert"
+                        ),
+                        source
+                    );
+                } catch (Throwable t) {
+                    com.pagesofatlas.PagesOfAtlasClient.LOGGER.error(
+                        "[SHADER DUMP] Failed writing vertex shader",
+                        t
+                    );
+                }
+
                 source =
                     pagesofatlas$patchVertex(
                         source
                     );
+
+                try {
+                    java.nio.file.Path dumpDir =
+                        net.minecraft.client.Minecraft
+                            .getInstance()
+                            .gameDirectory
+                            .toPath()
+                            .resolve(
+                                "pagesofatlas-shader-dumps"
+                            );
+
+                    java.nio.file.Files.createDirectories(
+                        dumpDir
+                    );
+
+                    String safeName =
+                        "shader-"
+                            + Integer.toHexString(
+                                source.hashCode()
+                            );
+
+                    java.nio.file.Files.writeString(
+                        dumpDir.resolve(
+                            safeName
+                                + "-after-poa.vert"
+                        ),
+                        source
+                    );
+                } catch (Throwable t) {
+                    com.pagesofatlas.PagesOfAtlasClient.LOGGER.error(
+                        "[SHADER DUMP] Failed writing vertex shader",
+                        t
+                    );
+                }
             }
 
             if (stage.contains("FRAGMENT")) {
+                /*
+                 * TEMP DIAGNOSTIC:
+                 *
+                 * Dump every patchSodium fragment and include the Iris
+                 * program name. We now know shader-content heuristics
+                 * miss the actual Bliss terrain programs.
+                 */
+                try {
+                    java.nio.file.Path dumpDir =
+                        net.minecraft.client.Minecraft
+                            .getInstance()
+                            .gameDirectory
+                            .toPath()
+                            .resolve(
+                                "pagesofatlas-shader-dumps"
+                            );
+
+                    java.nio.file.Files.createDirectories(
+                        dumpDir
+                    );
+
+                    String safeProgram =
+                        name.replaceAll(
+                            "[^A-Za-z0-9_.-]",
+                            "_"
+                        );
+
+                    String beforeHash =
+                        Integer.toHexString(
+                            source.hashCode()
+                        );
+
+                    java.nio.file.Files.writeString(
+                        dumpDir.resolve(
+                            safeProgram
+                                + "-"
+                                + beforeHash
+                                + "-before-poa.frag"
+                        ),
+                        source
+                    );
+                } catch (Throwable t) {
+                    com.pagesofatlas.PagesOfAtlasClient.LOGGER.error(
+                        "[SHADER DUMP] Failed writing pre-POA fragment",
+                        t
+                    );
+                }
+
                 source =
                     pagesofatlas$patchFragment(
                         source
                     );
+
+                try {
+                    java.nio.file.Path dumpDir =
+                        net.minecraft.client.Minecraft
+                            .getInstance()
+                            .gameDirectory
+                            .toPath()
+                            .resolve(
+                                "pagesofatlas-shader-dumps"
+                            );
+
+                    java.nio.file.Files.createDirectories(
+                        dumpDir
+                    );
+
+                    String safeProgram =
+                        name.replaceAll(
+                            "[^A-Za-z0-9_.-]",
+                            "_"
+                        );
+
+                    String afterHash =
+                        Integer.toHexString(
+                            source.hashCode()
+                        );
+
+                    java.nio.file.Files.writeString(
+                        dumpDir.resolve(
+                            safeProgram
+                                + "-"
+                                + afterHash
+                                + "-after-poa.frag"
+                        ),
+                        source
+                    );
+                } catch (Throwable t) {
+                    com.pagesofatlas.PagesOfAtlasClient.LOGGER.error(
+                        "[SHADER DUMP] Failed writing post-POA fragment",
+                        t
+                    );
+                }
             }
 
             patched.put(
@@ -253,6 +450,47 @@ public abstract class IrisTransformPatcherMixin {
             );
 
         /*
+         * Some shader packs pass the terrain atlas through a local
+         * sampler parameter before sampling it.
+         *
+         * Complementary's anisotropic filtering path is a canonical
+         * example:
+         *
+         *   textureAF(tex, uv)
+         *       ->
+         *   textureLod(texSampler, sampleUV, lod)
+         *
+         * Direct diffuse rewriting cannot see that texSampler aliases
+         * the terrain atlas. When that exact terrain-filter pattern is
+         * present, route the alias through POA as well.
+         */
+        source =
+            pagesofatlas$routeDiffuseSamplerAliases(
+                source,
+                diffuseSampler
+            );
+
+        /*
+         * Bliss-style POM helper routing.
+         *
+         * Bliss passes gtexture, normals, and specular through the
+         * same sampler2D helper:
+         *
+         *   texture2D_POMSwitch(gtexture, ...)
+         *   texture2D_POMSwitch(normals, ...)
+         *   texture2D_POMSwitch(specular, ...)
+         *
+         * The helper's sampler parameter therefore cannot be
+         * rewritten globally. Rewrite only the invocation whose
+         * first argument is the detected diffuse terrain sampler.
+         */
+        source =
+            pagesofatlas$routePomSwitchDiffuse(
+                source,
+                diffuseSampler
+            );
+
+        /*
          * Route conventional Iris / OptiFine / labPBR terrain
          * normal and specular samplers through POA's physical
          * companion pages.
@@ -337,51 +575,18 @@ public abstract class IrisTransformPatcherMixin {
             injection.append(
                 "\n"
                 + "vec4 pagesofatlas_texture(vec2 uv) {\n"
-                + "    vec2 pagesofatlas_dx = dFdx(uv);\n"
-                + "    vec2 pagesofatlas_dy = dFdy(uv);\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
-                + "        vec2 pagesofatlas_size = vec2(textureSize(u_BlockTex1, 0));\n"
-                + "        vec2 pagesofatlas_dx_texel = pagesofatlas_dx * pagesofatlas_size;\n"
-                + "        vec2 pagesofatlas_dy_texel = pagesofatlas_dy * pagesofatlas_size;\n"
-                + "        float pagesofatlas_rho = max(length(pagesofatlas_dx_texel), length(pagesofatlas_dy_texel));\n"
-                + "        float pagesofatlas_lod = log2(max(pagesofatlas_rho, 1.0));\n"
-                + "        return textureLod(u_BlockTex1, uv, clamp(pagesofatlas_lod, 0.0, "
-                + maxMipLiteral
-                + "));\n"
+                + "        return textureLod(u_BlockTex1, uv, 0.5);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 2u) {\n"
-                + "        vec2 pagesofatlas_size = vec2(textureSize(u_BlockTex2, 0));\n"
-                + "        vec2 pagesofatlas_dx_texel = pagesofatlas_dx * pagesofatlas_size;\n"
-                + "        vec2 pagesofatlas_dy_texel = pagesofatlas_dy * pagesofatlas_size;\n"
-                + "        float pagesofatlas_rho = max(length(pagesofatlas_dx_texel), length(pagesofatlas_dy_texel));\n"
-                + "        float pagesofatlas_lod = log2(max(pagesofatlas_rho, 1.0));\n"
-                + "        return textureLod(u_BlockTex2, uv, clamp(pagesofatlas_lod, 0.0, "
-                + maxMipLiteral
-                + "));\n"
+                + "        return textureLod(u_BlockTex2, uv, 0.5);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 3u) {\n"
-                + "        vec2 pagesofatlas_size = vec2(textureSize(u_BlockTex3, 0));\n"
-                + "        vec2 pagesofatlas_dx_texel = pagesofatlas_dx * pagesofatlas_size;\n"
-                + "        vec2 pagesofatlas_dy_texel = pagesofatlas_dy * pagesofatlas_size;\n"
-                + "        float pagesofatlas_rho = max(length(pagesofatlas_dx_texel), length(pagesofatlas_dy_texel));\n"
-                + "        float pagesofatlas_lod = log2(max(pagesofatlas_rho, 1.0));\n"
-                + "        return textureLod(u_BlockTex3, uv, clamp(pagesofatlas_lod, 0.0, "
-                + maxMipLiteral
-                + "));\n"
+                + "        return textureLod(u_BlockTex3, uv, 0.5);\n"
                 + "    }\n"
-                + "    vec2 pagesofatlas_size = vec2(textureSize("
-                + diffuseSampler
-                + ", 0));\n"
-                + "    vec2 pagesofatlas_dx_texel = pagesofatlas_dx * pagesofatlas_size;\n"
-                + "    vec2 pagesofatlas_dy_texel = pagesofatlas_dy * pagesofatlas_size;\n"
-                + "    float pagesofatlas_rho = max(length(pagesofatlas_dx_texel), length(pagesofatlas_dy_texel));\n"
-                + "    float pagesofatlas_lod = log2(max(pagesofatlas_rho, 1.0));\n"
-
                 + "    return textureLod("
                 + diffuseSampler
-                + ", uv, clamp(pagesofatlas_lod, 0.0, "
-                + maxMipLiteral
-                + "));\n"
+                + ", uv, 0.5);\n"
                 + "}\n\n"
             );
         }
@@ -414,17 +619,17 @@ public abstract class IrisTransformPatcherMixin {
             injection.append(
                 "vec4 pagesofatlas_textureGrad(vec2 uv, vec2 dx, vec2 dy) {\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
-                + "        return textureLod(u_BlockTex1, uv, 0.0);\n"
+                + "        return textureGrad(u_BlockTex1, uv, dx, dy);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 2u) {\n"
-                + "        return textureLod(u_BlockTex2, uv, 0.0);\n"
+                + "        return textureGrad(u_BlockTex2, uv, dx, dy);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 3u) {\n"
-                + "        return textureLod(u_BlockTex3, uv, 0.0);\n"
+                + "        return textureGrad(u_BlockTex3, uv, dx, dy);\n"
                 + "    }\n"
-                + "    return textureLod("
+                + "    return textureGrad("
                 + diffuseSampler
-                + ", uv, 0.0);\n"
+                + ", uv, dx, dy);\n"
                 + "}\n\n"
             );
         }
@@ -434,18 +639,21 @@ public abstract class IrisTransformPatcherMixin {
 
             injection.append(
                 "vec4 pagesofatlas_textureLod(vec2 uv, float lod) {\n"
+                + "    float pagesofatlas_explicit_lod = clamp(lod, 0.0, "
+                + maxMipLiteral
+                + ");\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
-                + "        return textureLod(u_BlockTex1, uv, 0.0);\n"
+                + "        return textureLod(u_BlockTex1, uv, pagesofatlas_explicit_lod);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 2u) {\n"
-                + "        return textureLod(u_BlockTex2, uv, 0.0);\n"
+                + "        return textureLod(u_BlockTex2, uv, pagesofatlas_explicit_lod);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 3u) {\n"
-                + "        return textureLod(u_BlockTex3, uv, 0.0);\n"
+                + "        return textureLod(u_BlockTex3, uv, pagesofatlas_explicit_lod);\n"
                 + "    }\n"
                 + "    return textureLod("
                 + diffuseSampler
-                + ", uv, 0.0);\n"
+                + ", uv, pagesofatlas_explicit_lod);\n"
                 + "}\n\n"
             );
         }
@@ -471,18 +679,50 @@ public abstract class IrisTransformPatcherMixin {
             String candidate :
             DIFFUSE_SAMPLER_CANDIDATES
         ) {
+            /*
+             * GLSL permits multiple sampler declarations in one
+             * statement, for example:
+             *
+             *     uniform sampler2D tex, noisetex;
+             *
+             * Several shader packs, including Solas, use this form.
+             *
+             * Match the complete declaration and then test each
+             * comma-separated identifier rather than requiring the
+             * diffuse sampler to appear alone.
+             */
             Pattern declaration =
                 Pattern.compile(
                     "\\buniform\\s+sampler2D\\s+"
-                    + Pattern.quote(candidate)
-                    + "\\s*;"
+                    + "([^;]+);"
                 );
 
-            if (
-                declaration.matcher(source)
-                    .find()
-            ) {
-                return candidate;
+            Matcher declarationMatcher =
+                declaration.matcher(source);
+
+            while (declarationMatcher.find()) {
+                String[] names =
+                    declarationMatcher
+                        .group(1)
+                        .split(",");
+
+                for (String rawName : names) {
+                    String name =
+                        rawName.trim();
+
+                    /*
+                     * Be conservative. Ignore anything that is not
+                     * a plain GLSL identifier.
+                     */
+                    if (!name.matches(
+                            "[A-Za-z_][A-Za-z0-9_]*")) {
+                        continue;
+                    }
+
+                    if (name.equals(candidate)) {
+                        return candidate;
+                    }
+                }
             }
         }
 
@@ -701,22 +941,230 @@ public abstract class IrisTransformPatcherMixin {
             "\n"
             + "vec4 pagesofatlas_textureGrad(vec2 uv, vec2 dx, vec2 dy) {\n"
             + "    if (pagesofatlas_page == 1u) {\n"
-            + "        return textureLod(u_BlockTex1, uv, 0.0);\n"
+            + "        return textureGrad(u_BlockTex1, uv, dx, dy);\n"
             + "    }\n"
             + "    if (pagesofatlas_page == 2u) {\n"
-            + "        return textureLod(u_BlockTex2, uv, 0.0);\n"
+            + "        return textureGrad(u_BlockTex2, uv, dx, dy);\n"
             + "    }\n"
             + "    if (pagesofatlas_page == 3u) {\n"
-            + "        return textureLod(u_BlockTex3, uv, 0.0);\n"
+            + "        return textureGrad(u_BlockTex3, uv, dx, dy);\n"
             + "    }\n"
-            + "    return textureLod("
+            + "    return textureGrad("
             + diffuseSampler
-            + ", uv, 0.0);\n"
+            + ", uv, dx, dy);\n"
             + "}\n\n"
         );
 
         return source.substring(0, insertAt)
             + early
+            + source.substring(insertAt);
+    }
+
+    private static String pagesofatlas$routeDiffuseSamplerAliases(
+        String source,
+        String diffuseSampler
+    ) {
+        /*
+         * Do not rewrite arbitrary sampler parameters.
+         *
+         * Require both:
+         *
+         *   1. a textureAF(sampler2D texSampler, ...) definition
+         *   2. a textureAF(<detected diffuse sampler>, ...) call
+         *
+         * Together these establish the alias relationship used by
+         * Complementary-style manual anisotropic filtering.
+         */
+        Pattern definition =
+            Pattern.compile(
+                "\\btextureAF\\s*\\(\\s*sampler2D\\s+"
+                + "([A-Za-z_][A-Za-z0-9_]*)\\s*,"
+            );
+
+        Matcher matcher =
+            definition.matcher(
+                source
+            );
+
+        if (!matcher.find()) {
+            return source;
+        }
+
+        String alias =
+            matcher.group(1);
+
+        Pattern diffuseCall =
+            Pattern.compile(
+                "\\btextureAF\\s*\\(\\s*"
+                + Pattern.quote(diffuseSampler)
+                + "\\s*,"
+            );
+
+        if (!diffuseCall.matcher(source).find()) {
+            return source;
+        }
+
+        String aliasPattern =
+            Pattern.quote(alias);
+
+        source =
+            source.replaceAll(
+                "\\btextureLod\\s*\\(\\s*"
+                + aliasPattern
+                + "\\s*,",
+                "pagesofatlas_textureLod("
+            );
+
+        source =
+            source.replaceAll(
+                "\\btextureGrad\\s*\\(\\s*"
+                + aliasPattern
+                + "\\s*,",
+                "pagesofatlas_textureGrad("
+            );
+
+        source =
+            source.replaceAll(
+                "\\btexture\\s*\\(\\s*"
+                + aliasPattern
+                + "\\s*,",
+                "pagesofatlas_texture("
+            );
+
+        return source;
+    }
+
+    private static String pagesofatlas$routePomSwitchDiffuse(
+        String source,
+        String diffuseSampler
+    ) {
+        Pattern definition =
+            Pattern.compile(
+                "\\bvec4\\s+texture2D_POMSwitch\\s*\\("
+                + "\\s*sampler2D\\s+"
+                + "([A-Za-z_][A-Za-z0-9_]*)\\s*,"
+                + "\\s*vec2\\s+"
+                + "([A-Za-z_][A-Za-z0-9_]*)\\s*,"
+                + "\\s*vec4\\s+"
+                + "([A-Za-z_][A-Za-z0-9_]*)\\s*,"
+                + "\\s*bool\\s+"
+                + "([A-Za-z_][A-Za-z0-9_]*)\\s*,"
+                + "\\s*float\\s+"
+                + "([A-Za-z_][A-Za-z0-9_]*)\\s*\\)"
+            );
+
+        Matcher definitionMatcher =
+            definition.matcher(source);
+
+        if (!definitionMatcher.find()) {
+            return source;
+        }
+
+        boolean routedDiffuse =
+            Pattern.compile(
+                "\\btexture2D_POMSwitch\\s*\\(\\s*"
+                + Pattern.quote(diffuseSampler)
+                + "\\s*,"
+            ).matcher(source).find();
+
+        boolean routedNormal =
+            Pattern.compile(
+                "\\btexture2D_POMSwitch\\s*\\(\\s*normals\\s*,"
+            ).matcher(source).find();
+
+        boolean routedSpecular =
+            Pattern.compile(
+                "\\btexture2D_POMSwitch\\s*\\(\\s*specular\\s*,"
+            ).matcher(source).find();
+
+        if (
+            !routedDiffuse
+            && !routedNormal
+            && !routedSpecular
+        ) {
+            return source;
+        }
+
+        if (routedDiffuse) {
+            source =
+                source.replaceAll(
+                    "\\btexture2D_POMSwitch\\s*\\(\\s*"
+                    + Pattern.quote(diffuseSampler)
+                    + "\\s*,",
+                    "pagesofatlas_texture2D_POMSwitch("
+                );
+        }
+
+        if (routedNormal) {
+            source =
+                source.replaceAll(
+                    "\\btexture2D_POMSwitch\\s*\\(\\s*normals\\s*,",
+                    "pagesofatlas_normalTexture2D_POMSwitch("
+                );
+        }
+
+        if (routedSpecular) {
+            source =
+                source.replaceAll(
+                    "\\btexture2D_POMSwitch\\s*\\(\\s*specular\\s*,",
+                    "pagesofatlas_specularTexture2D_POMSwitch("
+                );
+        }
+
+        definitionMatcher =
+            definition.matcher(source);
+
+        if (!definitionMatcher.find()) {
+            return source;
+        }
+
+        int insertAt =
+            definitionMatcher.start();
+
+        StringBuilder helper =
+            new StringBuilder();
+
+        if (routedDiffuse) {
+            helper.append(
+                "vec4 pagesofatlas_texture2D_POMSwitch("
+                + "vec2 uv, vec4 dcdxdcdy, bool ifPOM, float LOD) {\n"
+                + "    if (ifPOM) {\n"
+                + "        return pagesofatlas_textureGrad("
+                + "uv, dcdxdcdy.xy, dcdxdcdy.zw);\n"
+                + "    }\n"
+                + "    return pagesofatlas_textureLod(uv, LOD);\n"
+                + "}\n\n"
+            );
+        }
+
+        if (routedNormal) {
+            helper.append(
+                "vec4 pagesofatlas_normalTexture2D_POMSwitch("
+                + "vec2 uv, vec4 dcdxdcdy, bool ifPOM, float LOD) {\n"
+                + "    if (ifPOM) {\n"
+                + "        return pagesofatlas_normalTextureGrad("
+                + "uv, dcdxdcdy.xy, dcdxdcdy.zw);\n"
+                + "    }\n"
+                + "    return pagesofatlas_normalTexture(uv, LOD);\n"
+                + "}\n\n"
+            );
+        }
+
+        if (routedSpecular) {
+            helper.append(
+                "vec4 pagesofatlas_specularTexture2D_POMSwitch("
+                + "vec2 uv, vec4 dcdxdcdy, bool ifPOM, float LOD) {\n"
+                + "    if (ifPOM) {\n"
+                + "        return pagesofatlas_specularTextureLod("
+                + "uv, 0.0);\n"
+                + "    }\n"
+                + "    return pagesofatlas_specularTextureLod(uv, LOD);\n"
+                + "}\n\n"
+            );
+        }
+
+        return source.substring(0, insertAt)
+            + helper
             + source.substring(insertAt);
     }
 
