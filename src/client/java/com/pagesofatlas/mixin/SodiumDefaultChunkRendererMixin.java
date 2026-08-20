@@ -195,18 +195,15 @@ public abstract class SodiumDefaultChunkRendererMixin {
          * after RenderPass.close().
          */
         /*
-         * DIAGNOSTIC BUILD:
+         * Request deterministic full-resolution PBR companions.
          *
-         * Do not request POA-owned full-resolution PBR pages.
-         *
-         * Shader-side PBR interception is disabled in this build, so
-         * constructing eight 16384x16384 normal/specular textures
-         * would consume VRAM without contributing to rendering.
-         *
-         * Keep the sampler bindings below intact; with no allocated
-         * POA PBR page they safely receive the ordinary fallback view.
+         * They are built after the active RenderPass closes.
          */
-        // PBR page requests intentionally disabled.
+        for (int page = 0; page < 4; page++) {
+            PagesOfAtlasPbrPages.requestPage(
+                page
+            );
+        }
 
         pagesofatlas$bindPbrPage(
             renderPass,
@@ -260,11 +257,7 @@ public abstract class SodiumDefaultChunkRendererMixin {
     private void pagesofatlas$buildRequestedPbrPages(
         CallbackInfo ci
     ) {
-        /*
-         * DIAGNOSTIC BUILD:
-         * Full-resolution POA PBR page construction is disabled.
-         */
-        // PagesOfAtlasPbrPages.buildRequestedPages();
+        PagesOfAtlasPbrPages.buildRequestedPages();
     }
 
     private static void pagesofatlas$bindPbrPage(

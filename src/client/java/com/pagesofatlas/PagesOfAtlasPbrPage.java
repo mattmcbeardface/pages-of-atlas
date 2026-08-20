@@ -22,7 +22,26 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 public final class PagesOfAtlasPbrPage
     implements AutoCloseable {
 
+    /*
+     * EXPERIMENT:
+     *
+     * Keep the logical POA atlas dimensions separate from the
+     * physical PBR texture dimensions.
+     *
+     * PBR textures currently use the same physical resolution
+     * as the corresponding diffuse POA page.
+     *
+     *     16384x16384 logical page
+     *              ->
+     *      16384x16384 PBR page
+     */
+    public static final int PBR_RESOLUTION_DIVISOR = 1;
+
     private final int page;
+
+    private final int logicalWidth;
+    private final int logicalHeight;
+
     private final int width;
     private final int height;
 
@@ -38,8 +57,21 @@ public final class PagesOfAtlasPbrPage
         int height
     ) {
         this.page = page;
-        this.width = width;
-        this.height = height;
+
+        this.logicalWidth = width;
+        this.logicalHeight = height;
+
+        this.width =
+            Math.max(
+                1,
+                width / PBR_RESOLUTION_DIVISOR
+            );
+
+        this.height =
+            Math.max(
+                1,
+                height / PBR_RESOLUTION_DIVISOR
+            );
     }
 
     public void allocate() {
@@ -101,15 +133,26 @@ public final class PagesOfAtlasPbrPage
             );
 
         PagesOfAtlasClient.LOGGER.info(
-            "[PBR PAGE] Allocated page {} PBR textures {}x{}",
+            "[PBR PAGE] Allocated page {} PBR textures {}x{} from logical {}x{} (1/{})",
             this.page,
             this.width,
-            this.height
+            this.height,
+            this.logicalWidth,
+            this.logicalHeight,
+            PBR_RESOLUTION_DIVISOR
         );
     }
 
     public int page() {
         return this.page;
+    }
+
+    public int logicalWidth() {
+        return this.logicalWidth;
+    }
+
+    public int logicalHeight() {
+        return this.logicalHeight;
     }
 
     public int width() {

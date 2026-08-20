@@ -360,11 +360,29 @@ public final class PagesOfAtlasPbrUploader {
             var dimensions =
                 dimensionsOptional.get();
 
+            /*
+             * EXPERIMENT:
+             *
+             * The diffuse placement remains authoritative, but the
+             * physical PBR page is 1/N the diffuse resolution.
+             *
+             * Scaling the whole atlas and every sprite placement by
+             * the same factor preserves normalized UV coordinates.
+             */
+            int divisor =
+                PagesOfAtlasPbrPage.PBR_RESOLUTION_DIVISOR;
+
             int targetWidth =
-                dimensions.width();
+                Math.max(
+                    1,
+                    dimensions.width() / divisor
+                );
 
             int targetHeight =
-                dimensions.height();
+                Math.max(
+                    1,
+                    dimensions.height() / divisor
+                );
 
             if (
                 image.getWidth() == targetWidth
@@ -406,13 +424,47 @@ public final class PagesOfAtlasPbrUploader {
             /*
              * Bounds safety.
              */
-            int destX =
+            int logicalDestX =
                 placement.x()
                     + placement.padding();
 
-            int destY =
+            int logicalDestY =
                 placement.y()
                     + placement.padding();
+
+            /*
+             * The current POA packing grid is aligned well beyond
+             * the 2x reduction used by this experiment.
+             *
+             * Refuse silently-corrupt placement if a future pack
+             * produces coordinates that cannot be represented
+             * exactly at this reduction factor.
+             */
+            if (
+                logicalDestX % divisor != 0
+                || logicalDestY % divisor != 0
+                || dimensions.width() % divisor != 0
+                || dimensions.height() % divisor != 0
+            ) {
+                PagesOfAtlasClient.LOGGER.error(
+                    "[PBR UPLOAD] Cannot exactly downscale {} placement for {} by divisor {}: dest={},{} size={}x{}",
+                    type,
+                    sprite,
+                    divisor,
+                    logicalDestX,
+                    logicalDestY,
+                    dimensions.width(),
+                    dimensions.height()
+                );
+
+                return UploadResult.FAILED;
+            }
+
+            int destX =
+                logicalDestX / divisor;
+
+            int destY =
+                logicalDestY / divisor;
 
             if (
                 destX + uploadImage.getWidth()
