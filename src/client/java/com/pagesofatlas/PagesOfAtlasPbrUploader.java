@@ -1,6 +1,8 @@
 package com.pagesofatlas;
 
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.CommandEncoder;
@@ -31,6 +33,14 @@ public final class PagesOfAtlasPbrUploader {
 
     private static final int DEFAULT_SPECULAR =
         0x00000000;
+
+    /*
+     * Keep PBR uploads bounded so command submission overhead is
+     * reduced without retaining an entire atlas worth of decoded
+     * NativeImages in system RAM.
+     */
+    private static final int PBR_UPLOAD_BATCH_SIZE =
+        16;
 
     private PagesOfAtlasPbrUploader() {}
 
@@ -251,7 +261,11 @@ public final class PagesOfAtlasPbrUploader {
         int scaled = 0;
         int failed = 0;
 
-        for (var placed : placements) {
+        try (
+            PbrUploadBatch uploadBatch =
+                new PbrUploadBatch()
+        ) {
+            for (var placed : placements) {
 
             Identifier sprite =
                 placed.sprite();
@@ -265,7 +279,8 @@ public final class PagesOfAtlasPbrUploader {
                     page,
                     sprite,
                     placement,
-                    PagesOfAtlasPbrSourceResolver.Type.NORMAL
+                    PagesOfAtlasPbrSourceResolver.Type.NORMAL,
+                    uploadBatch
                 );
 
             if (normal.found()) {
@@ -290,7 +305,8 @@ public final class PagesOfAtlasPbrUploader {
                     page,
                     sprite,
                     placement,
-                    PagesOfAtlasPbrSourceResolver.Type.SPECULAR
+                    PagesOfAtlasPbrSourceResolver.Type.SPECULAR,
+                    uploadBatch
                 );
 
             if (specular.found()) {
@@ -307,6 +323,7 @@ public final class PagesOfAtlasPbrUploader {
 
             if (specular.failed()) {
                 failed++;
+            }
             }
         }
 
@@ -328,7 +345,8 @@ public final class PagesOfAtlasPbrUploader {
         PagesOfAtlasPbrPage page,
         Identifier sprite,
         PagesOfAtlasRegistry.Placement placement,
-        PagesOfAtlasPbrSourceResolver.Type type
+        PagesOfAtlasPbrSourceResolver.Type type,
+        PbrUploadBatch uploadBatch
     ) {
         var resourceOptional =
             PagesOfAtlasPbrSourceResolver.find(
@@ -510,29 +528,34 @@ public final class PagesOfAtlasPbrUploader {
             }
 
             /*
-             * Submit while uploadImage is still alive.
-             *
-             * We intentionally use one encoder per source image for
-             * this first correctness pass. Once page-1 PBR routing is
-             * proven, this can be safely optimized into batches.
+             * Transfer ownership of the decoded image to the bounded
+             * upload batch. The batch keeps NativeImage memory alive
+             * until its command encoder has been submitted.
              */
-            CommandEncoder encoder =
-                RenderSystem.getDevice()
-                    .createCommandEncoder();
+            NativeImage queuedImage =
+                uploadImage;
 
-            encoder.writeToTexture(
+            NativeImage originalImage =
+                image;
+
+            uploadBatch.queue(
                 type
                     == PagesOfAtlasPbrSourceResolver.Type.NORMAL
                         ? page.normalTexture()
                         : page.specularTexture(),
-                uploadImage,
-                0,
-                0,
+                queuedImage,
                 destX,
-                destY
+                destY,
+                originalImage != queuedImage
+                    ? originalImage
+                    : null
             );
 
-            encoder.submit();
+            /*
+             * Ownership has transferred to uploadBatch.
+             */
+            uploadImage = null;
+            image = null;
 
             return new UploadResult(
                 true,
@@ -564,6 +587,107 @@ public final class PagesOfAtlasPbrUploader {
             }
         }
     }
+
+    /*
+     * Bounded command batch for decoded PBR sprite images.
+     *
+     * NativeImage must remain alive until submit(), so ownership of
+     * each queued image is retained here and released immediately
+     * after the corresponding command batch is submitted.
+     */
+    private static final class PbrUploadBatch
+        implements AutoCloseable {
+
+        private final List<PendingPbrUpload>
+            pending =
+                new ArrayList<>();
+
+        void queue(
+            com.mojang.blaze3d.textures.GpuTexture texture,
+            NativeImage image,
+            int destX,
+            int destY,
+            NativeImage additionalImageToClose
+        ) {
+            pending.add(
+                new PendingPbrUpload(
+                    texture,
+                    image,
+                    destX,
+                    destY,
+                    additionalImageToClose
+                )
+            );
+
+            if (
+                pending.size()
+                    >= PBR_UPLOAD_BATCH_SIZE
+            ) {
+                flush();
+            }
+        }
+
+        private void flush() {
+            if (pending.isEmpty()) {
+                return;
+            }
+
+            try {
+                CommandEncoder encoder =
+                    RenderSystem.getDevice()
+                        .createCommandEncoder();
+
+                for (
+                    PendingPbrUpload upload :
+                    pending
+                ) {
+                    encoder.writeToTexture(
+                        upload.texture(),
+                        upload.image(),
+                        0,
+                        0,
+                        upload.destX(),
+                        upload.destY()
+                    );
+                }
+
+                encoder.submit();
+
+            } finally {
+                for (
+                    PendingPbrUpload upload :
+                    pending
+                ) {
+                    try {
+                        upload.image().close();
+                    } finally {
+                        if (
+                            upload.additionalImageToClose()
+                                != null
+                        ) {
+                            upload.additionalImageToClose()
+                                .close();
+                        }
+                    }
+                }
+
+                pending.clear();
+            }
+        }
+
+        @Override
+        public void close() {
+            flush();
+        }
+    }
+
+    private record PendingPbrUpload(
+        com.mojang.blaze3d.textures.GpuTexture texture,
+        NativeImage image,
+        int destX,
+        int destY,
+        NativeImage additionalImageToClose
+    ) {}
 
     private record UploadResult(
         boolean found,
