@@ -253,15 +253,22 @@ public abstract class IrisTransformPatcherMixin {
             );
 
         /*
-         * Preserve shader-pack normal/specular/POM sampling.
-         *
-         * POA currently routes only diffuse terrain sampling here.
-         * PBR companion routing remains disabled until it can be
-         * reintroduced without altering shader-pack material
-         * semantics or exhausting texture units.
+         * Route conventional Iris / OptiFine / labPBR terrain
+         * normal and specular samplers through POA's physical
+         * companion pages.
          */
         source =
+            pagesofatlas$replacePbrTextureCalls(
+                source
+            );
+
+        source =
             pagesofatlas$ensureFragmentGlobals(
+                source
+            );
+
+        source =
+            pagesofatlas$insertPbrHelpersEarly(
                 source
             );
 

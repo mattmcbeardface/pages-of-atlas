@@ -28,13 +28,14 @@ public final class PagesOfAtlasPbrPage
      * Keep the logical POA atlas dimensions separate from the
      * physical PBR texture dimensions.
      *
-     * A divisor of 2 means:
+     * PBR textures currently use the same physical resolution
+     * as the corresponding diffuse POA page.
      *
      *     16384x16384 logical page
      *              ->
-     *       8192x8192 PBR page
+     *      16384x16384 PBR page
      */
-    public static final int PBR_RESOLUTION_DIVISOR = 2;
+    public static final int PBR_RESOLUTION_DIVISOR = 1;
 
     private final int page;
 
