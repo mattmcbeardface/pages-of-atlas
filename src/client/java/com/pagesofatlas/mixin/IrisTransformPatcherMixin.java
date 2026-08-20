@@ -1,5 +1,9 @@
 package com.pagesofatlas.mixin;
 
+import com.pagesofatlas.PagesOfAtlasRegistry;
+
+import net.minecraft.client.renderer.texture.TextureAtlas;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -191,6 +195,40 @@ public abstract class IrisTransformPatcherMixin {
             );
 
         /*
+         * Use the same authoritative mip level that POA used when
+         * constructing the physical block-atlas pages.
+         *
+         * Do not ask GLSL to discover the mip count; some shader
+         * profiles used by Iris do not expose textureQueryLevels().
+         *
+         * If transformation somehow occurs before the upload bundle
+         * exists, fall back conservatively to mip 0.
+         */
+        int maxMipLevel =
+            PagesOfAtlasRegistry
+                .uploadBundle(
+                    TextureAtlas.LOCATION_BLOCKS
+                )
+                .map(
+                    bundle ->
+                        bundle.combined()
+                            .mipLevel()
+                )
+                .orElse(0);
+
+        maxMipLevel =
+            Math.max(
+                maxMipLevel,
+                0
+            );
+
+        String maxMipLiteral =
+            Integer.toString(
+                maxMipLevel
+            )
+            + ".0";
+
+        /*
          * If this transformed program does not expose a known
          * terrain diffuse sampler, leave it alone.
          *
@@ -215,18 +253,15 @@ public abstract class IrisTransformPatcherMixin {
             );
 
         /*
-         * Route Iris/OptiFine-style terrain PBR samplers.
+         * Preserve shader-pack normal/specular/POM sampling.
          *
-         * For this proof of concept only page 1 has its own
-         * normal/specular companion atlases.
+         * POA currently routes only diffuse terrain sampling here.
+         * PBR companion routing remains disabled until it can be
+         * reintroduced without altering shader-pack material
+         * semantics or exhausting texture units.
          */
         source =
-            pagesofatlas$replacePbrTextureCalls(
-                source
-            );
-
-        source =
-            pagesofatlas$insertPbrHelpersEarly(
+            pagesofatlas$ensureFragmentGlobals(
                 source
             );
 
@@ -290,87 +325,120 @@ public abstract class IrisTransformPatcherMixin {
         }
 
         if (!source.contains(
-                "vec4 pagesofatlas_texture(vec2 uv)")) {
+                "vec4 pagesofatlas_texture(vec2 uv) {")) {
 
             injection.append(
                 "\n"
                 + "vec4 pagesofatlas_texture(vec2 uv) {\n"
+                + "    vec2 pagesofatlas_dx = dFdx(uv);\n"
+                + "    vec2 pagesofatlas_dy = dFdy(uv);\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
-                + "        return texture(u_BlockTex1, uv);\n"
+                + "        vec2 pagesofatlas_size = vec2(textureSize(u_BlockTex1, 0));\n"
+                + "        vec2 pagesofatlas_dx_texel = pagesofatlas_dx * pagesofatlas_size;\n"
+                + "        vec2 pagesofatlas_dy_texel = pagesofatlas_dy * pagesofatlas_size;\n"
+                + "        float pagesofatlas_rho = max(length(pagesofatlas_dx_texel), length(pagesofatlas_dy_texel));\n"
+                + "        float pagesofatlas_lod = log2(max(pagesofatlas_rho, 1.0));\n"
+                + "        return textureLod(u_BlockTex1, uv, clamp(pagesofatlas_lod, 0.0, "
+                + maxMipLiteral
+                + "));\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 2u) {\n"
-                + "        return texture(u_BlockTex2, uv);\n"
+                + "        vec2 pagesofatlas_size = vec2(textureSize(u_BlockTex2, 0));\n"
+                + "        vec2 pagesofatlas_dx_texel = pagesofatlas_dx * pagesofatlas_size;\n"
+                + "        vec2 pagesofatlas_dy_texel = pagesofatlas_dy * pagesofatlas_size;\n"
+                + "        float pagesofatlas_rho = max(length(pagesofatlas_dx_texel), length(pagesofatlas_dy_texel));\n"
+                + "        float pagesofatlas_lod = log2(max(pagesofatlas_rho, 1.0));\n"
+                + "        return textureLod(u_BlockTex2, uv, clamp(pagesofatlas_lod, 0.0, "
+                + maxMipLiteral
+                + "));\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 3u) {\n"
-                + "        return texture(u_BlockTex3, uv);\n"
+                + "        vec2 pagesofatlas_size = vec2(textureSize(u_BlockTex3, 0));\n"
+                + "        vec2 pagesofatlas_dx_texel = pagesofatlas_dx * pagesofatlas_size;\n"
+                + "        vec2 pagesofatlas_dy_texel = pagesofatlas_dy * pagesofatlas_size;\n"
+                + "        float pagesofatlas_rho = max(length(pagesofatlas_dx_texel), length(pagesofatlas_dy_texel));\n"
+                + "        float pagesofatlas_lod = log2(max(pagesofatlas_rho, 1.0));\n"
+                + "        return textureLod(u_BlockTex3, uv, clamp(pagesofatlas_lod, 0.0, "
+                + maxMipLiteral
+                + "));\n"
                 + "    }\n"
-                + "    return texture("
+                + "    vec2 pagesofatlas_size = vec2(textureSize("
                 + diffuseSampler
-                + ", uv);\n"
+                + ", 0));\n"
+                + "    vec2 pagesofatlas_dx_texel = pagesofatlas_dx * pagesofatlas_size;\n"
+                + "    vec2 pagesofatlas_dy_texel = pagesofatlas_dy * pagesofatlas_size;\n"
+                + "    float pagesofatlas_rho = max(length(pagesofatlas_dx_texel), length(pagesofatlas_dy_texel));\n"
+                + "    float pagesofatlas_lod = log2(max(pagesofatlas_rho, 1.0));\n"
+
+                + "    return textureLod("
+                + diffuseSampler
+                + ", uv, clamp(pagesofatlas_lod, 0.0, "
+                + maxMipLiteral
+                + "));\n"
                 + "}\n\n"
             );
         }
 
         if (!source.contains(
-                "vec4 pagesofatlas_texture(vec2 uv, float bias)")) {
+                "vec4 pagesofatlas_texture(vec2 uv, float bias) {")) {
 
             injection.append(
                 "vec4 pagesofatlas_texture(vec2 uv, float bias) {\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
-                + "        return texture(u_BlockTex1, uv, bias);\n"
+                + "        return textureLod(u_BlockTex1, uv, 0.0);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 2u) {\n"
-                + "        return texture(u_BlockTex2, uv, bias);\n"
+                + "        return textureLod(u_BlockTex2, uv, 0.0);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 3u) {\n"
-                + "        return texture(u_BlockTex3, uv, bias);\n"
+                + "        return textureLod(u_BlockTex3, uv, 0.0);\n"
                 + "    }\n"
-                + "    return texture("
+                + "    return textureLod("
                 + diffuseSampler
-                + ", uv, bias);\n"
+                + ", uv, 0.0);\n"
                 + "}\n\n"
             );
         }
 
 
         if (!source.contains(
-                "vec4 pagesofatlas_textureGrad(vec2 uv, vec2 dx, vec2 dy)")) {
+                "vec4 pagesofatlas_textureGrad(vec2 uv, vec2 dx, vec2 dy) {")) {
 
             injection.append(
                 "vec4 pagesofatlas_textureGrad(vec2 uv, vec2 dx, vec2 dy) {\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
-                + "        return textureGrad(u_BlockTex1, uv, dx, dy);\n"
+                + "        return textureLod(u_BlockTex1, uv, 0.0);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 2u) {\n"
-                + "        return textureGrad(u_BlockTex2, uv, dx, dy);\n"
+                + "        return textureLod(u_BlockTex2, uv, 0.0);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 3u) {\n"
-                + "        return textureGrad(u_BlockTex3, uv, dx, dy);\n"
+                + "        return textureLod(u_BlockTex3, uv, 0.0);\n"
                 + "    }\n"
-                + "    return textureGrad("
+                + "    return textureLod("
                 + diffuseSampler
-                + ", uv, dx, dy);\n"
+                + ", uv, 0.0);\n"
                 + "}\n\n"
             );
         }
 
         if (!source.contains(
-                "vec4 pagesofatlas_textureLod(vec2 uv, float lod)")) {
+                "vec4 pagesofatlas_textureLod(vec2 uv, float lod) {")) {
 
             injection.append(
                 "vec4 pagesofatlas_textureLod(vec2 uv, float lod) {\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
-                + "        return textureLod(u_BlockTex1, uv, lod);\n"
+                + "        return textureLod(u_BlockTex1, uv, 0.0);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 2u) {\n"
-                + "        return textureLod(u_BlockTex2, uv, lod);\n"
+                + "        return textureLod(u_BlockTex2, uv, 0.0);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 3u) {\n"
-                + "        return textureLod(u_BlockTex3, uv, lod);\n"
+                + "        return textureLod(u_BlockTex3, uv, 0.0);\n"
                 + "    }\n"
                 + "    return textureLod("
                 + diffuseSampler
-                + ", uv, lod);\n"
+                + ", uv, 0.0);\n"
                 + "}\n\n"
             );
         }
@@ -441,6 +509,94 @@ public abstract class IrisTransformPatcherMixin {
         return null;
     }
 
+    private static String pagesofatlas$ensureFragmentGlobals(
+        String source
+    ) {
+        /*
+         * Find the first real GLSL function definition.
+         *
+         * Everything before this point is shader-global territory.
+         */
+        Pattern functionPattern =
+            Pattern.compile(
+                "(?m)^[ \\t]*"
+                + "(?:[A-Za-z_][A-Za-z0-9_]*[ \\t]+)+"
+                + "[A-Za-z_][A-Za-z0-9_]*[ \\t]*"
+                + "\\([^;{}]*\\)[ \\t]*\\{"
+            );
+
+        Matcher matcher =
+            functionPattern.matcher(
+                source
+            );
+
+        if (!matcher.find()) {
+            return source;
+        }
+
+        int insertAt =
+            matcher.start();
+
+        StringBuilder globals =
+            new StringBuilder();
+
+        /*
+         * Every declaration is independently idempotent.
+         */
+        if (!source.contains(
+                "flat in uint pagesofatlas_page;")) {
+
+            globals.append(
+                "flat in uint pagesofatlas_page;\n"
+            );
+        }
+
+        if (!source.contains(
+                "vec4 pagesofatlas_texture(vec2 uv);")) {
+
+            globals.append(
+                "vec4 pagesofatlas_texture(vec2 uv);\n"
+            );
+        }
+
+        if (!source.contains(
+                "vec4 pagesofatlas_texture(vec2 uv, float bias);")) {
+
+            globals.append(
+                "vec4 pagesofatlas_texture(vec2 uv, float bias);\n"
+            );
+        }
+
+        if (!source.contains(
+                "vec4 pagesofatlas_textureGrad(vec2 uv, vec2 dx, vec2 dy);")) {
+
+            globals.append(
+                "vec4 pagesofatlas_textureGrad(vec2 uv, vec2 dx, vec2 dy);\n"
+            );
+        }
+
+        if (!source.contains(
+                "vec4 pagesofatlas_textureLod(vec2 uv, float lod);")) {
+
+            globals.append(
+                "vec4 pagesofatlas_textureLod(vec2 uv, float lod);\n"
+            );
+        }
+
+        if (globals.isEmpty()) {
+            return source;
+        }
+
+        return source.substring(
+                0,
+                insertAt
+            )
+            + globals
+            + source.substring(
+                insertAt
+            );
+    }
+
     private static String pagesofatlas$insertTextureGradHelperEarly(
         String source,
         String diffuseSampler
@@ -494,7 +650,15 @@ public abstract class IrisTransformPatcherMixin {
         StringBuilder early =
             new StringBuilder();
 
-        if (!source.substring(0, insertAt).contains(
+        /*
+         * pagesofatlas_page is a shader-global declaration.
+         *
+         * Another POA helper may already have injected it at a
+         * different position in the shader. Checking only the text
+         * before this helper's insertion point can therefore create
+         * a second global declaration.
+         */
+        if (!source.contains(
                 "flat in uint pagesofatlas_page;")) {
 
             early.append(
@@ -530,17 +694,17 @@ public abstract class IrisTransformPatcherMixin {
             "\n"
             + "vec4 pagesofatlas_textureGrad(vec2 uv, vec2 dx, vec2 dy) {\n"
             + "    if (pagesofatlas_page == 1u) {\n"
-            + "        return textureGrad(u_BlockTex1, uv, dx, dy);\n"
+            + "        return textureLod(u_BlockTex1, uv, 0.0);\n"
             + "    }\n"
             + "    if (pagesofatlas_page == 2u) {\n"
-            + "        return textureGrad(u_BlockTex2, uv, dx, dy);\n"
+            + "        return textureLod(u_BlockTex2, uv, 0.0);\n"
             + "    }\n"
             + "    if (pagesofatlas_page == 3u) {\n"
-            + "        return textureGrad(u_BlockTex3, uv, dx, dy);\n"
+            + "        return textureLod(u_BlockTex3, uv, 0.0);\n"
             + "    }\n"
-            + "    return textureGrad("
+            + "    return textureLod("
             + diffuseSampler
-            + ", uv, dx, dy);\n"
+            + ", uv, 0.0);\n"
             + "}\n\n"
         );
 
@@ -700,7 +864,15 @@ public abstract class IrisTransformPatcherMixin {
         StringBuilder early =
             new StringBuilder();
 
-        if (!before.contains(
+        /*
+         * pagesofatlas_page is shared by diffuse and PBR routing.
+         *
+         * Search the complete transformed shader rather than only
+         * the region before this helper's insertion point. This
+         * makes declaration injection idempotent when multiple POA
+         * helper blocks are inserted at different locations.
+         */
+        if (!source.contains(
                 "flat in uint pagesofatlas_page;")) {
 
             early.append(
@@ -759,6 +931,22 @@ public abstract class IrisTransformPatcherMixin {
                 + "    return texture(normals, uv);\n"
                 + "}\n\n"
 
+                + "vec4 pagesofatlas_normalTexture(vec2 uv, float bias) {\n"
+                + "    if (pagesofatlas_page == 0u) {\n"
+                + "        return texture(u_BlockNormalTex0, uv, bias);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 1u) {\n"
+                + "        return texture(u_BlockNormalTex1, uv, bias);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 2u) {\n"
+                + "        return texture(u_BlockNormalTex2, uv, bias);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 3u) {\n"
+                + "        return texture(u_BlockNormalTex3, uv, bias);\n"
+                + "    }\n"
+                + "    return texture(normals, uv, bias);\n"
+                + "}\n\n"
+
                 + "vec4 pagesofatlas_normalTextureGrad(vec2 uv, vec2 dx, vec2 dy) {\n"
                 + "    if (pagesofatlas_page == 0u) {\n"
                 + "        return textureGrad(u_BlockNormalTex0, uv, dx, dy);\n"
@@ -793,6 +981,22 @@ public abstract class IrisTransformPatcherMixin {
                 + "        return texture(u_BlockSpecularTex3, uv);\n"
                 + "    }\n"
                 + "    return texture(specular, uv);\n"
+                + "}\n\n"
+
+                + "vec4 pagesofatlas_specularTexture(vec2 uv, float bias) {\n"
+                + "    if (pagesofatlas_page == 0u) {\n"
+                + "        return texture(u_BlockSpecularTex0, uv, bias);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 1u) {\n"
+                + "        return texture(u_BlockSpecularTex1, uv, bias);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 2u) {\n"
+                + "        return texture(u_BlockSpecularTex2, uv, bias);\n"
+                + "    }\n"
+                + "    if (pagesofatlas_page == 3u) {\n"
+                + "        return texture(u_BlockSpecularTex3, uv, bias);\n"
+                + "    }\n"
+                + "    return texture(specular, uv, bias);\n"
                 + "}\n\n"
 
                 + "vec4 pagesofatlas_specularTextureLod(vec2 uv, float lod) {\n"

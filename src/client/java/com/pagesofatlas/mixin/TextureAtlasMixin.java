@@ -64,6 +64,14 @@ public abstract class TextureAtlasMixin {
      *
      * Pages 0, 2 and 3 continue using vanilla behavior.
      */
+    /*
+     * Physical POA pages currently use Minecraft's normal
+     * uploadInitialContents() path.
+     *
+     * The experimental direct uploader remains disabled until its
+     * memory benefits can be validated independently from shader
+     * compatibility.
+     */
     @Inject(
         method = "uploadInitialContents",
         at = @At("HEAD"),
@@ -72,53 +80,7 @@ public abstract class TextureAtlasMixin {
     private void pagesofatlas$directUploadPageOne(
         CallbackInfo ci
     ) {
-        Identifier pageOne =
-            PagesOfAtlasRegistry.physicalAtlasLocation(
-                TextureAtlas.LOCATION_BLOCKS,
-                1
-            );
-
-        if (!this.location.equals(pageOne)) {
-            return;
-        }
-
-        try {
-            PagesOfAtlasClient.LOGGER.info(
-                "[DIRECT UPLOAD] Bypassing vanilla initial upload for {}",
-                this.location
-            );
-
-            AbstractTexture texture =
-                (AbstractTexture)(Object)this;
-
-            PagesOfAtlasDirectUploader.uploadBlockPage(
-                texture.getTexture(),
-                this.texturesByName.values(),
-                this.maxMipLevel
-            );
-
-            /*
-             * Preserve the final step of vanilla
-             * TextureAtlas.uploadInitialContents().
-             *
-             * This uploads the current frames for animated sprites
-             * using Minecraft's already-created animation states.
-             */
-            this.uploadAnimationFrames();
-
-            ci.cancel();
-
-        } catch (Throwable t) {
-            PagesOfAtlasClient.LOGGER.error(
-                "[DIRECT UPLOAD] Page 1 direct upload failed; falling back to vanilla",
-                t
-            );
-
-            /*
-             * Do not cancel. Vanilla uploadInitialContents()
-             * will execute if our experimental path fails.
-             */
-        }
+        // Intentionally allow vanilla uploadInitialContents().
     }
 
     @Inject(
