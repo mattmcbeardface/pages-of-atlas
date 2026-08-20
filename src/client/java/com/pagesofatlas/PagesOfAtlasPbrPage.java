@@ -35,7 +35,7 @@ public final class PagesOfAtlasPbrPage
      *              ->
      *      16384x16384 PBR page
      */
-    public static final int PBR_RESOLUTION_DIVISOR = 1;
+    public static final int PBR_RESOLUTION_DIVISOR = 2;
 
     private final int page;
 
