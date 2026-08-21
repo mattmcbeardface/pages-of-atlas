@@ -199,20 +199,33 @@ public abstract class SodiumDefaultChunkRendererMixin {
          *
          * They are built after the active RenderPass closes.
          */
-        for (int page = 0; page < 4; page++) {
-            PagesOfAtlasPbrPages.requestPage(
-                page
-            );
-        }
+        /*
+         * Stage expensive PBR construction across terrain renders.
+         *
+         * Request only the first physical page whose PBR companions
+         * do not exist yet. The @RETURN injection will build that one
+         * page after this RenderPass closes.
+         *
+         * Subsequent terrain renders progressively request the
+         * remaining pages instead of constructing all four in one
+         * enormous startup burst.
+         */
+        for (int page = 1; page < 4; page++) {
+            if (
+                PagesOfAtlasPbrPages.existingNormalPage(
+                    page
+                ) == null
+                || PagesOfAtlasPbrPages.existingSpecularPage(
+                    page
+                ) == null
+            ) {
+                PagesOfAtlasPbrPages.requestPage(
+                    page
+                );
 
-        pagesofatlas$bindPbrPage(
-            renderPass,
-            0,
-            "u_BlockNormalTex0",
-            "u_BlockSpecularTex0",
-            pageZero,
-            sampler
-        );
+                break;
+            }
+        }
 
         pagesofatlas$bindPbrPage(
             renderPass,

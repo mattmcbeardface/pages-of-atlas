@@ -1,6 +1,8 @@
 package com.pagesofatlas;
 
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.CommandEncoder;
@@ -31,6 +33,14 @@ public final class PagesOfAtlasPbrUploader {
 
     private static final int DEFAULT_SPECULAR =
         0x00000000;
+
+    /*
+     * Keep PBR uploads bounded so command submission overhead is
+     * reduced without retaining an entire atlas worth of decoded
+     * NativeImages in system RAM.
+     */
+    private static final int PBR_UPLOAD_BATCH_SIZE =
+        16;
 
     private PagesOfAtlasPbrUploader() {}
 
@@ -89,6 +99,12 @@ public final class PagesOfAtlasPbrUploader {
         ) {
             /*
              * NORMAL
+             *
+             * Batch every neutral normal stripe into one command
+             * encoder and submit once for the complete page.
+             *
+             * Keep both the reusable full stripe and any possible
+             * short final stripe alive until submit().
              */
             stripe.fillRect(
                 0,
@@ -98,45 +114,51 @@ public final class PagesOfAtlasPbrUploader {
                 DEFAULT_NORMAL
             );
 
-            for (
-                int y = 0;
-                y < page.height();
-                y += stripeHeight
-            ) {
-                int remaining =
-                    Math.min(
-                        stripeHeight,
-                        page.height() - y
-                    );
+            NativeImage shortNormalStripe = null;
 
-                NativeImage uploadStripe =
-                    stripe;
+            try {
+                CommandEncoder encoder =
+                    RenderSystem.getDevice()
+                        .createCommandEncoder();
 
-                /*
-                 * Page heights are normally multiples of 256.
-                 * Handle a possible short final stripe safely.
-                 */
-                if (remaining != stripe.getHeight()) {
-                    uploadStripe =
-                        new NativeImage(
-                            page.width(),
-                            remaining,
-                            false
+                for (
+                    int y = 0;
+                    y < page.height();
+                    y += stripeHeight
+                ) {
+                    int remaining =
+                        Math.min(
+                            stripeHeight,
+                            page.height() - y
                         );
 
-                    uploadStripe.fillRect(
-                        0,
-                        0,
-                        uploadStripe.getWidth(),
-                        uploadStripe.getHeight(),
-                        DEFAULT_NORMAL
-                    );
-                }
+                    NativeImage uploadStripe =
+                        stripe;
 
-                try {
-                    CommandEncoder encoder =
-                        RenderSystem.getDevice()
-                            .createCommandEncoder();
+                    /*
+                     * Page heights are normally multiples of 256,
+                     * but retain safe handling for a short final
+                     * stripe.
+                     */
+                    if (remaining != stripe.getHeight()) {
+                        shortNormalStripe =
+                            new NativeImage(
+                                page.width(),
+                                remaining,
+                                false
+                            );
+
+                        shortNormalStripe.fillRect(
+                            0,
+                            0,
+                            shortNormalStripe.getWidth(),
+                            shortNormalStripe.getHeight(),
+                            DEFAULT_NORMAL
+                        );
+
+                        uploadStripe =
+                            shortNormalStripe;
+                    }
 
                     encoder.writeToTexture(
                         page.normalTexture(),
@@ -146,18 +168,21 @@ public final class PagesOfAtlasPbrUploader {
                         0,
                         y
                     );
+                }
 
-                    encoder.submit();
+                encoder.submit();
 
-                } finally {
-                    if (uploadStripe != stripe) {
-                        uploadStripe.close();
-                    }
+            } finally {
+                if (shortNormalStripe != null) {
+                    shortNormalStripe.close();
                 }
             }
 
             /*
-             * SPECULAR
+             * The normal upload has now been submitted, so it is
+             * safe to reuse and recolor the stripe for SPECULAR.
+             *
+             * Again, queue every stripe first and submit only once.
              */
             stripe.fillRect(
                 0,
@@ -167,41 +192,46 @@ public final class PagesOfAtlasPbrUploader {
                 DEFAULT_SPECULAR
             );
 
-            for (
-                int y = 0;
-                y < page.height();
-                y += stripeHeight
-            ) {
-                int remaining =
-                    Math.min(
-                        stripeHeight,
-                        page.height() - y
-                    );
+            NativeImage shortSpecularStripe = null;
 
-                NativeImage uploadStripe =
-                    stripe;
+            try {
+                CommandEncoder encoder =
+                    RenderSystem.getDevice()
+                        .createCommandEncoder();
 
-                if (remaining != stripe.getHeight()) {
-                    uploadStripe =
-                        new NativeImage(
-                            page.width(),
-                            remaining,
-                            false
+                for (
+                    int y = 0;
+                    y < page.height();
+                    y += stripeHeight
+                ) {
+                    int remaining =
+                        Math.min(
+                            stripeHeight,
+                            page.height() - y
                         );
 
-                    uploadStripe.fillRect(
-                        0,
-                        0,
-                        uploadStripe.getWidth(),
-                        uploadStripe.getHeight(),
-                        DEFAULT_SPECULAR
-                    );
-                }
+                    NativeImage uploadStripe =
+                        stripe;
 
-                try {
-                    CommandEncoder encoder =
-                        RenderSystem.getDevice()
-                            .createCommandEncoder();
+                    if (remaining != stripe.getHeight()) {
+                        shortSpecularStripe =
+                            new NativeImage(
+                                page.width(),
+                                remaining,
+                                false
+                            );
+
+                        shortSpecularStripe.fillRect(
+                            0,
+                            0,
+                            shortSpecularStripe.getWidth(),
+                            shortSpecularStripe.getHeight(),
+                            DEFAULT_SPECULAR
+                        );
+
+                        uploadStripe =
+                            shortSpecularStripe;
+                    }
 
                     encoder.writeToTexture(
                         page.specularTexture(),
@@ -211,13 +241,13 @@ public final class PagesOfAtlasPbrUploader {
                         0,
                         y
                     );
+                }
 
-                    encoder.submit();
+                encoder.submit();
 
-                } finally {
-                    if (uploadStripe != stripe) {
-                        uploadStripe.close();
-                    }
+            } finally {
+                if (shortSpecularStripe != null) {
+                    shortSpecularStripe.close();
                 }
             }
         }
@@ -231,7 +261,11 @@ public final class PagesOfAtlasPbrUploader {
         int scaled = 0;
         int failed = 0;
 
-        for (var placed : placements) {
+        try (
+            PbrUploadBatch uploadBatch =
+                new PbrUploadBatch()
+        ) {
+            for (var placed : placements) {
 
             Identifier sprite =
                 placed.sprite();
@@ -245,7 +279,8 @@ public final class PagesOfAtlasPbrUploader {
                     page,
                     sprite,
                     placement,
-                    PagesOfAtlasPbrSourceResolver.Type.NORMAL
+                    PagesOfAtlasPbrSourceResolver.Type.NORMAL,
+                    uploadBatch
                 );
 
             if (normal.found()) {
@@ -270,7 +305,8 @@ public final class PagesOfAtlasPbrUploader {
                     page,
                     sprite,
                     placement,
-                    PagesOfAtlasPbrSourceResolver.Type.SPECULAR
+                    PagesOfAtlasPbrSourceResolver.Type.SPECULAR,
+                    uploadBatch
                 );
 
             if (specular.found()) {
@@ -287,6 +323,7 @@ public final class PagesOfAtlasPbrUploader {
 
             if (specular.failed()) {
                 failed++;
+            }
             }
         }
 
@@ -308,7 +345,8 @@ public final class PagesOfAtlasPbrUploader {
         PagesOfAtlasPbrPage page,
         Identifier sprite,
         PagesOfAtlasRegistry.Placement placement,
-        PagesOfAtlasPbrSourceResolver.Type type
+        PagesOfAtlasPbrSourceResolver.Type type,
+        PbrUploadBatch uploadBatch
     ) {
         var resourceOptional =
             PagesOfAtlasPbrSourceResolver.find(
@@ -490,29 +528,34 @@ public final class PagesOfAtlasPbrUploader {
             }
 
             /*
-             * Submit while uploadImage is still alive.
-             *
-             * We intentionally use one encoder per source image for
-             * this first correctness pass. Once page-1 PBR routing is
-             * proven, this can be safely optimized into batches.
+             * Transfer ownership of the decoded image to the bounded
+             * upload batch. The batch keeps NativeImage memory alive
+             * until its command encoder has been submitted.
              */
-            CommandEncoder encoder =
-                RenderSystem.getDevice()
-                    .createCommandEncoder();
+            NativeImage queuedImage =
+                uploadImage;
 
-            encoder.writeToTexture(
+            NativeImage originalImage =
+                image;
+
+            uploadBatch.queue(
                 type
                     == PagesOfAtlasPbrSourceResolver.Type.NORMAL
                         ? page.normalTexture()
                         : page.specularTexture(),
-                uploadImage,
-                0,
-                0,
+                queuedImage,
                 destX,
-                destY
+                destY,
+                originalImage != queuedImage
+                    ? originalImage
+                    : null
             );
 
-            encoder.submit();
+            /*
+             * Ownership has transferred to uploadBatch.
+             */
+            uploadImage = null;
+            image = null;
 
             return new UploadResult(
                 true,
@@ -544,6 +587,107 @@ public final class PagesOfAtlasPbrUploader {
             }
         }
     }
+
+    /*
+     * Bounded command batch for decoded PBR sprite images.
+     *
+     * NativeImage must remain alive until submit(), so ownership of
+     * each queued image is retained here and released immediately
+     * after the corresponding command batch is submitted.
+     */
+    private static final class PbrUploadBatch
+        implements AutoCloseable {
+
+        private final List<PendingPbrUpload>
+            pending =
+                new ArrayList<>();
+
+        void queue(
+            com.mojang.blaze3d.textures.GpuTexture texture,
+            NativeImage image,
+            int destX,
+            int destY,
+            NativeImage additionalImageToClose
+        ) {
+            pending.add(
+                new PendingPbrUpload(
+                    texture,
+                    image,
+                    destX,
+                    destY,
+                    additionalImageToClose
+                )
+            );
+
+            if (
+                pending.size()
+                    >= PBR_UPLOAD_BATCH_SIZE
+            ) {
+                flush();
+            }
+        }
+
+        private void flush() {
+            if (pending.isEmpty()) {
+                return;
+            }
+
+            try {
+                CommandEncoder encoder =
+                    RenderSystem.getDevice()
+                        .createCommandEncoder();
+
+                for (
+                    PendingPbrUpload upload :
+                    pending
+                ) {
+                    encoder.writeToTexture(
+                        upload.texture(),
+                        upload.image(),
+                        0,
+                        0,
+                        upload.destX(),
+                        upload.destY()
+                    );
+                }
+
+                encoder.submit();
+
+            } finally {
+                for (
+                    PendingPbrUpload upload :
+                    pending
+                ) {
+                    try {
+                        upload.image().close();
+                    } finally {
+                        if (
+                            upload.additionalImageToClose()
+                                != null
+                        ) {
+                            upload.additionalImageToClose()
+                                .close();
+                        }
+                    }
+                }
+
+                pending.clear();
+            }
+        }
+
+        @Override
+        public void close() {
+            flush();
+        }
+    }
+
+    private record PendingPbrUpload(
+        com.mojang.blaze3d.textures.GpuTexture texture,
+        NativeImage image,
+        int destX,
+        int destY,
+        NativeImage additionalImageToClose
+    ) {}
 
     private record UploadResult(
         boolean found,

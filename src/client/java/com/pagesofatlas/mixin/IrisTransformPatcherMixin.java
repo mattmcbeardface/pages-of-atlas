@@ -1139,10 +1139,13 @@ public abstract class IrisTransformPatcherMixin {
         }
 
         /*
-         * POA owns deterministic PBR companions for every physical
-         * diffuse page.
+         * Iris already owns the native PBR companions for physical
+         * diffuse page zero through its normals/specular samplers.
+         *
+         * POA therefore only needs custom deterministic PBR
+         * companions for overflow pages 1-3.
          */
-        for (int page = 0; page < 4; page++) {
+        for (int page = 1; page < 4; page++) {
 
             String normalDecl =
                 "uniform sampler2D u_BlockNormalTex"
@@ -1175,7 +1178,7 @@ public abstract class IrisTransformPatcherMixin {
             early.append(
                 "vec4 pagesofatlas_normalTexture(vec2 uv) {\n"
                 + "    if (pagesofatlas_page == 0u) {\n"
-                + "        return texture(u_BlockNormalTex0, uv);\n"
+                + "        return texture(normals, uv);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
                 + "        return texture(u_BlockNormalTex1, uv);\n"
@@ -1191,7 +1194,7 @@ public abstract class IrisTransformPatcherMixin {
 
                 + "vec4 pagesofatlas_normalTexture(vec2 uv, float bias) {\n"
                 + "    if (pagesofatlas_page == 0u) {\n"
-                + "        return texture(u_BlockNormalTex0, uv, bias);\n"
+                + "        return texture(normals, uv, bias);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
                 + "        return texture(u_BlockNormalTex1, uv, bias);\n"
@@ -1207,7 +1210,7 @@ public abstract class IrisTransformPatcherMixin {
 
                 + "vec4 pagesofatlas_normalTextureGrad(vec2 uv, vec2 dx, vec2 dy) {\n"
                 + "    if (pagesofatlas_page == 0u) {\n"
-                + "        return textureGrad(u_BlockNormalTex0, uv, dx, dy);\n"
+                + "        return textureGrad(normals, uv, dx, dy);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
                 + "        return textureGrad(u_BlockNormalTex1, uv, dx, dy);\n"
@@ -1227,7 +1230,7 @@ public abstract class IrisTransformPatcherMixin {
             early.append(
                 "vec4 pagesofatlas_specularTexture(vec2 uv) {\n"
                 + "    if (pagesofatlas_page == 0u) {\n"
-                + "        return texture(u_BlockSpecularTex0, uv);\n"
+                + "        return texture(specular, uv);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
                 + "        return texture(u_BlockSpecularTex1, uv);\n"
@@ -1243,7 +1246,7 @@ public abstract class IrisTransformPatcherMixin {
 
                 + "vec4 pagesofatlas_specularTexture(vec2 uv, float bias) {\n"
                 + "    if (pagesofatlas_page == 0u) {\n"
-                + "        return texture(u_BlockSpecularTex0, uv, bias);\n"
+                + "        return texture(specular, uv, bias);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
                 + "        return texture(u_BlockSpecularTex1, uv, bias);\n"
@@ -1259,7 +1262,7 @@ public abstract class IrisTransformPatcherMixin {
 
                 + "vec4 pagesofatlas_specularTextureLod(vec2 uv, float lod) {\n"
                 + "    if (pagesofatlas_page == 0u) {\n"
-                + "        return textureLod(u_BlockSpecularTex0, uv, lod);\n"
+                + "        return textureLod(specular, uv, lod);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
                 + "        return textureLod(u_BlockSpecularTex1, uv, lod);\n"
