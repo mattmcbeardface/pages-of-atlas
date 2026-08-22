@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 
+import com.pagesofatlas.PagesOfAtlasIrisPbrState;
 import com.pagesofatlas.PagesOfAtlasPbrPages;
 import com.pagesofatlas.PagesOfAtlasRegistry;
 
@@ -144,20 +145,22 @@ public abstract class SodiumDefaultChunkRendererMixin {
          * remaining pages instead of constructing all four in one
          * enormous startup burst.
          */
-        for (int page = 1; page < 4; page++) {
-            if (
-                PagesOfAtlasPbrPages.existingNormalPage(
-                    page
-                ) == null
-                || PagesOfAtlasPbrPages.existingSpecularPage(
-                    page
-                ) == null
-            ) {
-                PagesOfAtlasPbrPages.requestPage(
-                    page
-                );
+        if (PagesOfAtlasIrisPbrState.active()) {
+            for (int page = 1; page < 4; page++) {
+                if (
+                    PagesOfAtlasPbrPages.existingNormalPage(
+                        page
+                    ) == null
+                    || PagesOfAtlasPbrPages.existingSpecularPage(
+                        page
+                    ) == null
+                ) {
+                    PagesOfAtlasPbrPages.requestPage(
+                        page
+                    );
 
-                break;
+                    break;
+                }
             }
         }
 
@@ -212,7 +215,10 @@ public abstract class SodiumDefaultChunkRendererMixin {
                 )
                 .orElse(false);
 
-        if (!splitActive) {
+        if (
+            !splitActive
+            || !PagesOfAtlasIrisPbrState.active()
+        ) {
             return;
         }
 
