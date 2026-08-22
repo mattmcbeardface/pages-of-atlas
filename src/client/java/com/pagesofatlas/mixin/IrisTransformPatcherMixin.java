@@ -81,6 +81,25 @@ public abstract class IrisTransformPatcherMixin {
         boolean shadow,
         CallbackInfoReturnable<Map<?, String>> cir
     ) {
+        /*
+         * True passthrough:
+         *
+         * If Minecraft's block atlas fits natively, POA has no
+         * published multi-page plan. In that case Iris must receive
+         * its original transformed shaders completely untouched.
+         */
+        boolean splitActive =
+            PagesOfAtlasRegistry
+                .plan(TextureAtlas.LOCATION_BLOCKS)
+                .map(plan ->
+                    plan.pageCount() > 1
+                )
+                .orElse(false);
+
+        if (!splitActive) {
+            return;
+        }
+
         Map<?, String> original =
             cir.getReturnValue();
 

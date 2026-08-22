@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 
+import com.pagesofatlas.PagesOfAtlasIrisPbrState;
 import com.pagesofatlas.PagesOfAtlasPbrPages;
 import com.pagesofatlas.PagesOfAtlasRegistry;
 
@@ -65,79 +66,13 @@ public abstract class SodiumDefaultChunkRendererMixin {
             );
 
         if (planOptional.isEmpty()) {
-
             /*
-             * The expanded pipeline still expects every binding.
+             * True passthrough.
              *
-             * With no active POA atlas, use page zero as a harmless
-             * fallback for all additional samplers.
+             * The normal Sodium block texture was already bound
+             * above. With no active POA split atlas, do not add any
+             * POA sampler bindings to the render pass.
              */
-            renderPass.bindTexture(
-                "u_BlockNormalTex0",
-                pageZero,
-                sampler
-            );
-
-            renderPass.bindTexture(
-                "u_BlockSpecularTex0",
-                pageZero,
-                sampler
-            );
-
-            renderPass.bindTexture(
-                "u_BlockNormalTex1",
-                pageZero,
-                sampler
-            );
-
-            renderPass.bindTexture(
-                "u_BlockSpecularTex1",
-                pageZero,
-                sampler
-            );
-
-            renderPass.bindTexture(
-                "u_BlockNormalTex2",
-                pageZero,
-                sampler
-            );
-
-            renderPass.bindTexture(
-                "u_BlockSpecularTex2",
-                pageZero,
-                sampler
-            );
-
-            renderPass.bindTexture(
-                "u_BlockNormalTex3",
-                pageZero,
-                sampler
-            );
-
-            renderPass.bindTexture(
-                "u_BlockSpecularTex3",
-                pageZero,
-                sampler
-            );
-
-            renderPass.bindTexture(
-                "u_BlockTex1",
-                pageZero,
-                sampler
-            );
-
-            renderPass.bindTexture(
-                "u_BlockTex2",
-                pageZero,
-                sampler
-            );
-
-            renderPass.bindTexture(
-                "u_BlockTex3",
-                pageZero,
-                sampler
-            );
-
             return;
         }
 
@@ -210,20 +145,22 @@ public abstract class SodiumDefaultChunkRendererMixin {
          * remaining pages instead of constructing all four in one
          * enormous startup burst.
          */
-        for (int page = 1; page < 4; page++) {
-            if (
-                PagesOfAtlasPbrPages.existingNormalPage(
-                    page
-                ) == null
-                || PagesOfAtlasPbrPages.existingSpecularPage(
-                    page
-                ) == null
-            ) {
-                PagesOfAtlasPbrPages.requestPage(
-                    page
-                );
+        if (PagesOfAtlasIrisPbrState.active()) {
+            for (int page = 1; page < 4; page++) {
+                if (
+                    PagesOfAtlasPbrPages.existingNormalPage(
+                        page
+                    ) == null
+                    || PagesOfAtlasPbrPages.existingSpecularPage(
+                        page
+                    ) == null
+                ) {
+                    PagesOfAtlasPbrPages.requestPage(
+                        page
+                    );
 
-                break;
+                    break;
+                }
             }
         }
 
@@ -270,6 +207,21 @@ public abstract class SodiumDefaultChunkRendererMixin {
     private void pagesofatlas$buildRequestedPbrPages(
         CallbackInfo ci
     ) {
+        boolean splitActive =
+            PagesOfAtlasRegistry
+                .plan(TextureAtlas.LOCATION_BLOCKS)
+                .map(plan ->
+                    plan.pageCount() > 1
+                )
+                .orElse(false);
+
+        if (
+            !splitActive
+            || !PagesOfAtlasIrisPbrState.active()
+        ) {
+            return;
+        }
+
         PagesOfAtlasPbrPages.buildRequestedPages();
     }
 
