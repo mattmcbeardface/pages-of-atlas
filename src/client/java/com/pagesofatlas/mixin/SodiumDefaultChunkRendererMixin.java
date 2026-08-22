@@ -4,7 +4,8 @@ import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 
-import com.pagesofatlas.PagesOfAtlasIrisPbrState;
+import com.pagesofatlas.PagesOfAtlasIrisPbrCompat;
+import com.pagesofatlas.PagesOfAtlasPbrDemand;
 import com.pagesofatlas.PagesOfAtlasPbrPages;
 import com.pagesofatlas.PagesOfAtlasRegistry;
 
@@ -145,7 +146,7 @@ public abstract class SodiumDefaultChunkRendererMixin {
          * remaining pages instead of constructing all four in one
          * enormous startup burst.
          */
-        if (PagesOfAtlasIrisPbrState.active()) {
+        if (PagesOfAtlasPbrDemand.required()) {
             for (int page = 1; page < 4; page++) {
                 if (
                     PagesOfAtlasPbrPages.existingNormalPage(
@@ -215,10 +216,32 @@ public abstract class SodiumDefaultChunkRendererMixin {
                 )
                 .orElse(false);
 
+        if (!splitActive) {
+            return;
+        }
+
+        /*
+         * Iris rebuilt its pipeline without normals/specular.
+         *
+         * This executes after Sodium's active RenderPass has closed,
+         * so POA can safely destroy its overflow PBR textures.
+         */
         if (
-            !splitActive
-            || !PagesOfAtlasIrisPbrState.active()
+            PagesOfAtlasPbrDemand.consumeClearRequested()
         ) {
+            /*
+             * Shader reload boundary:
+             *
+             * Release both POA overflow PBR pages and Iris's native
+             * page-zero normal/specular atlases. Otherwise Iris keeps
+             * the old blocks_n / blocks_s textures resident even
+             * though the new pipeline no longer requires PBR.
+             */
+            PagesOfAtlasPbrPages.clear();
+            PagesOfAtlasIrisPbrCompat.clear();
+        }
+
+        if (!PagesOfAtlasPbrDemand.required()) {
             return;
         }
 

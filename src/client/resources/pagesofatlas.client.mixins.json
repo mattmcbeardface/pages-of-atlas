@@ -17,6 +17,7 @@
     "SodiumBlockRendererMixin",
     "IrisXHFPTerrainVertexMixin",
     "IrisTransformPatcherMixin",
+    "IrisRenderingPipelineMixin",
     "SodiumShaderChunkRendererMixin",
     "SodiumDefaultChunkRendererMixin",
     "ItemFeatureRendererMixin",
