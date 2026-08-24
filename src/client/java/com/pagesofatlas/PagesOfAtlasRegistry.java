@@ -161,6 +161,61 @@ public final class PagesOfAtlasRegistry {
             spriteCount
         );
 
+
+        /*
+         * TEMP DIAGNOSTIC:
+         * Show physical placement for the ground textures involved
+         * in the Photon POM corruption investigation.
+         */
+        if (
+            atlas.equals(
+                net.minecraft.client.renderer.texture.TextureAtlas.LOCATION_BLOCKS
+            )
+        ) {
+            for (
+                Map.Entry<SpriteKey, Placement> entry :
+                PLACEMENTS.entrySet()
+            ) {
+                SpriteKey key =
+                    entry.getKey();
+
+                if (!key.atlas().equals(atlas)) {
+                    continue;
+                }
+
+                String name =
+                    key.sprite().toString();
+
+                if (
+                    name.contains("sand")
+                    || name.contains("grass")
+                ) {
+                    Placement placement =
+                        entry.getValue();
+
+                    SpriteDimensions dimensions =
+                        DIMENSIONS.get(key);
+
+                    PagesOfAtlasClient.LOGGER.info(
+                        "[GROUND PLACEMENT] sprite={} page={} slot={},{} padding={} dimensions={}x{} pageSize={}x{}",
+                        key.sprite(),
+                        placement.page(),
+                        placement.x(),
+                        placement.y(),
+                        placement.padding(),
+                        dimensions != null
+                            ? dimensions.width()
+                            : -1,
+                        dimensions != null
+                            ? dimensions.height()
+                            : -1,
+                        placement.pageWidth(),
+                        placement.pageHeight()
+                    );
+                }
+            }
+        }
+
         for (
             PagePlan page :
             pagePlans
