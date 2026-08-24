@@ -271,6 +271,30 @@ public abstract class IrisTransformPatcherMixin {
                 diffuseSampler
             );
 
+
+        /*
+         * Solas POM-off diffuse path.
+         *
+         * With POM disabled, Solas samples terrain albedo through:
+         *
+         *     pagesofatlas_texture(texCoord)
+         *
+         * That overload performs mip/LOD selection and reproduces
+         * the distance-dependent atlas corruption seen previously.
+         *
+         * Solas POM-on already reaches the textureGrad route, whose
+         * POA implementation deliberately samples mip 0 and is known
+         * to render correctly.
+         *
+         * Route only this exact Solas terrain-main pattern through
+         * the same known-good helper. Do NOT globally change the
+         * ordinary pagesofatlas_texture() implementation.
+         */
+        source =
+            pagesofatlas$routeSolasPomOffDiffuse(
+                source
+            );
+
         /*
          * Some shader packs pass the terrain atlas through a local
          * sampler parameter before sampling it.
@@ -452,17 +476,17 @@ public abstract class IrisTransformPatcherMixin {
             injection.append(
                 "vec4 pagesofatlas_texture(vec2 uv, float bias) {\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
-                + "        return texture(u_BlockTex1, uv, bias);\n"
+                + "        return textureLod(u_BlockTex1, uv, 0.0);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 2u) {\n"
-                + "        return texture(u_BlockTex2, uv, bias);\n"
+                + "        return textureLod(u_BlockTex2, uv, 0.0);\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 3u) {\n"
-                + "        return texture(u_BlockTex3, uv, bias);\n"
+                + "        return textureLod(u_BlockTex3, uv, 0.0);\n"
                 + "    }\n"
-                + "    return texture("
+                + "    return textureLod("
                 + diffuseSampler
-                + ", uv, bias);\n"
+                + ", uv, 0.0);\n"
                 + "}\n\n"
             );
         }
@@ -1411,5 +1435,36 @@ public abstract class IrisTransformPatcherMixin {
         return source;
     }
 
+
+
+    private static String pagesofatlas$routeSolasPomOffDiffuse(
+        String source
+    ) {
+        /*
+         * Require several Solas-specific terrain markers so this
+         * cannot accidentally modify Photon or unrelated packs.
+         */
+        if (
+            !source.contains("getMaterials(")
+            ||
+            !source.contains("generateIPBR(")
+            ||
+            !source.contains("vec4 albedoTexture = pagesofatlas_texture( texCoord);")
+        ) {
+            return source;
+        }
+
+        String oldCall =
+            "vec4 albedoTexture = pagesofatlas_texture( texCoord);";
+
+        String newCall =
+            "vec4 albedoTexture = pagesofatlas_textureGrad("
+            + " texCoord, dFdx(texCoord), dFdy(texCoord));";
+
+        return source.replace(
+            oldCall,
+            newCall
+        );
+    }
 
 }
