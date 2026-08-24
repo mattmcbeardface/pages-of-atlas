@@ -113,7 +113,10 @@ version when reporting the issue.
 Pages of Atlas currently targets:
 
 - Minecraft 26.2
-- Fabric Loader
+- Fabric Loader 0.19.3 or newer
+- Fabric API 0.156.0 or newer
+- Iris 1.11.2 or newer
+- Sodium 0.9.1 or newer
 - Java 25
 
 Additional rendering or resource-pack mods may be required depending on the
