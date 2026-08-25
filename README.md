@@ -5,9 +5,10 @@
 It is designed for high-resolution resource packs whose combined texture atlas
 would otherwise exceed the maximum texture size supported by the user's GPU.
 
-Instead of requiring the entire block atlas to fit inside a single enormous GPU
-texture, Pages of Atlas divides it into multiple physical atlas pages and routes
-rendering to the appropriate page.
+Instead of requiring every supported logical atlas to fit inside a single
+enormous GPU texture, Pages of Atlas divides oversized block and painting
+atlases into multiple physical pages and routes rendering to the appropriate
+page.
 
 ## Why Pages of Atlas Exists
 
@@ -54,6 +55,8 @@ Pages of Atlas is intended to:
 - Allow extremely high-resolution resource packs to exceed the GPU's
   single-texture dimension limit.
 - Support multiple physical block-atlas pages.
+- Support high-resolution paintings across multiple physical painting-atlas
+  pages.
 - Preserve normal Minecraft terrain rendering.
 - Support solid, cutout, and translucent block rendering.
 - Support block-item rendering from paged atlases.
@@ -85,6 +88,11 @@ Patrix.
 
 Other resource packs that exceed the normal block-atlas texture-size limit may
 also benefit from Pages of Atlas.
+
+Minecraft 26.2 painting packs are also supported. Painting fronts can be spread
+across physical atlas pages while their back and edge texture remains available
+on the same page, including paintings whose individual textures are several
+thousand pixels wide or tall.
 
 Resource-pack-specific features can still require their normal companion mods.
 For example, connected or blended textures may require Continuity or another
@@ -163,6 +171,14 @@ the resource pack to reorganize its textures manually.
 This allows the effective logical atlas to exceed the maximum dimensions of any
 single GPU texture.
 
+For paintings, Pages of Atlas preserves one combined logical sprite lookup and
+routes each painting to the physical page containing its front texture. The
+vanilla painting back texture is present on every painting page, allowing
+Minecraft to keep using its normal single-texture painting render submission.
+
+Pages of Atlas currently supports up to four physical pages for each paged
+atlas.
+
 ## GPU Limits
 
 Pages of Atlas does not eliminate GPU limitations.
@@ -221,6 +237,8 @@ to remain an important part of development.
 
 Bug reports and reproducible test cases are welcome.
 
+Release changes are documented in [CHANGELOG.md](CHANGELOG.md).
+
 ## Reporting Issues
 
 When reporting a rendering problem, please include as much of the following as
@@ -271,6 +289,7 @@ Areas involved include:
 - render-state selection
 - terrain rendering
 - block-item rendering
+- painting rendering
 - shader interaction
 
 Because these systems change between Minecraft versions, Pages of Atlas should

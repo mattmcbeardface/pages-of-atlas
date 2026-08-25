@@ -5,6 +5,7 @@ import com.pagesofatlas.PagesOfAtlasDirectUploader;
 import com.pagesofatlas.PagesOfAtlasRegistry;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.Sheets;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
@@ -33,6 +34,9 @@ public abstract class TextureAtlasMixin {
 
     @Shadow
     private Map<Identifier, TextureAtlasSprite> texturesByName;
+
+    @Shadow
+    private TextureAtlasSprite missingSprite;
 
     @Shadow
     private int maxMipLevel;
@@ -171,6 +175,30 @@ public abstract class TextureAtlasMixin {
                     page.preparations()
                 );
 
+            }
+
+            if (location.equals(Sheets.PAINTINGS_SHEET)) {
+                /*
+                 * TextureAtlas.upload(pageZero) installs page zero's
+                 * physical lookup map on the logical painting atlas.
+                 * PaintingRenderer, however, performs direct atlas
+                 * lookups rather than using AtlasManager's combined map.
+                 *
+                 * Restore the combined map as a non-owning lookup view.
+                 * We intentionally do not change TextureAtlas.sprites:
+                 * that private list remains page zero only, so closing
+                 * the logical atlas cannot close sprites owned by a
+                 * secondary physical atlas.
+                 */
+                texturesByName =
+                    Map.copyOf(
+                        bundle.combined()
+                            .regions()
+                    );
+
+                missingSprite =
+                    bundle.combined()
+                        .missing();
             }
 
             /*

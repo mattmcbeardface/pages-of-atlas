@@ -110,22 +110,31 @@ public final class PagesOfAtlasRegistry {
 
                 sprites.add(sprite);
 
-                PLACEMENTS.put(
-                    new SpriteKey(
-                        atlas,
-                        sprite
-                    ),
-                    new Placement(
-                        placement.page(),
-                        page.width(),
-                        page.height(),
-                        placement.x(),
-                        placement.y(),
-                        placement.padding()
-                    )
-                );
+                Placement previous =
+                    PLACEMENTS.putIfAbsent(
+                        new SpriteKey(
+                            atlas,
+                            sprite
+                        ),
+                        new Placement(
+                            placement.page(),
+                            page.width(),
+                            page.height(),
+                            placement.x(),
+                            placement.y(),
+                            placement.padding()
+                        )
+                    );
 
-                spriteCount++;
+                /*
+                 * Replicated physical entries, currently minecraft:back
+                 * on painting pages, remain one logical sprite. Preserve
+                 * the first/page-zero placement for logical lookup and
+                 * count the identifier only once.
+                 */
+                if (previous == null) {
+                    spriteCount++;
+                }
             }
 
             pagePlans.add(

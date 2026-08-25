@@ -18,20 +18,80 @@ public final class PagesOfAtlasPager {
         int mipLevel,
         int padding
     ) {
+        return pack(
+            input,
+            maxWidth,
+            maxHeight,
+            mipLevel,
+            padding,
+            null
+        );
+    }
+
+    /**
+     * Packs an atlas while reserving one copy of {@code replicatedEntry}
+     * on every physical page.
+     *
+     * The entry is identified by object identity and omitted from the
+     * ordinary holder list. This is currently used only by the painting
+     * atlas so every physical page contains its backing/edge sprite.
+     */
+    public static <T extends Stitcher.Entry> Result<T>
+        packWithReplicatedEntry(
+            List<T> input,
+            int maxWidth,
+            int maxHeight,
+            int mipLevel,
+            int padding,
+            T replicatedEntry
+        ) {
+        if (replicatedEntry == null) {
+            throw new IllegalArgumentException(
+                "Replicated atlas entry cannot be null"
+            );
+        }
+
+        return pack(
+            input,
+            maxWidth,
+            maxHeight,
+            mipLevel,
+            padding,
+            replicatedEntry
+        );
+    }
+
+    private static <T extends Stitcher.Entry> Result<T> pack(
+        List<T> input,
+        int maxWidth,
+        int maxHeight,
+        int mipLevel,
+        int padding,
+        T replicatedEntry
+    ) {
         List<Holder<T>> holders = new ArrayList<>();
 
+        Holder<T> replicatedHolder =
+            replicatedEntry == null
+                ? null
+                : createHolder(
+                    replicatedEntry,
+                    mipLevel,
+                    padding
+                );
+
         for (T entry : input) {
-            holders.add(new Holder<>(
-                entry,
-                smallestFittingMinTexel(
-                    entry.width() + padding * 2,
-                    mipLevel
-                ),
-                smallestFittingMinTexel(
-                    entry.height() + padding * 2,
-                    mipLevel
+            if (entry == replicatedEntry) {
+                continue;
+            }
+
+            holders.add(
+                createHolder(
+                    entry,
+                    mipLevel,
+                    padding
                 )
-            ));
+            );
         }
 
         holders.sort(
@@ -76,8 +136,61 @@ public final class PagesOfAtlasPager {
             }
         }
 
+        if (replicatedHolder != null) {
+            if (pages.isEmpty()) {
+                pages.add(
+                    new Page<>(
+                        0,
+                        maxWidth,
+                        maxHeight
+                    )
+                );
+            }
+
+            /*
+             * Replicate only after normal packing is complete. Adding a
+             * tiny reserved sprite while pages are still growing can
+             * change the packer's axis decisions and create otherwise
+             * unnecessary full-size pages.
+             */
+            for (Page<T> page : pages) {
+                if (!page.add(replicatedHolder, padding)) {
+                    throw new IllegalStateException(
+                        "Replicated sprite cannot fit on PagesOfAtlas page "
+                            + page.number()
+                            + ": "
+                            + replicatedHolder.entry.name()
+                            + " ["
+                            + replicatedHolder.width
+                            + "x"
+                            + replicatedHolder.height
+                            + "]"
+                    );
+                }
+            }
+        }
+
         return new Result<>(List.copyOf(pages));
 
+    }
+
+    private static <T extends Stitcher.Entry> Holder<T>
+        createHolder(
+            T entry,
+            int mipLevel,
+            int padding
+        ) {
+        return new Holder<>(
+            entry,
+            smallestFittingMinTexel(
+                entry.width() + padding * 2,
+                mipLevel
+            ),
+            smallestFittingMinTexel(
+                entry.height() + padding * 2,
+                mipLevel
+            )
+        );
     }
 
     private static int smallestFittingMinTexel(

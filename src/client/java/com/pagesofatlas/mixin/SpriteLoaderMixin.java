@@ -1,6 +1,7 @@
 package com.pagesofatlas.mixin;
 
 import com.pagesofatlas.PagedTextureAtlasSprite;
+import com.pagesofatlas.NonOwningPagedTextureAtlasSprite;
 import com.pagesofatlas.PagesOfAtlasClient;
 import com.pagesofatlas.PagesOfAtlasPager;
 import com.pagesofatlas.PagesOfAtlasRegistry;
@@ -14,6 +15,7 @@ import java.util.concurrent.Executor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraft.client.TextureFilteringMethod;
+import net.minecraft.client.renderer.Sheets;
 import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
 import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.client.renderer.texture.SpriteLoader;
@@ -24,6 +26,7 @@ import net.minecraft.util.Mth;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -32,6 +35,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(SpriteLoader.class)
 public abstract class SpriteLoaderMixin {
+
+    @Unique
+    private static final Identifier pagesofatlas$PAINTING_BACK =
+        Identifier.withDefaultNamespace("back");
 
     @Shadow
     @Final
@@ -149,18 +156,45 @@ public abstract class SpriteLoaderMixin {
                     4
                 );
 
+        boolean paintingAtlas =
+            location.equals(Sheets.PAINTINGS_SHEET);
+
+        SpriteContents paintingBack =
+            paintingAtlas
+                ? sprites.stream()
+                    .filter(sprite ->
+                        sprite.name().equals(
+                            pagesofatlas$PAINTING_BACK
+                        )
+                    )
+                    .findFirst()
+                    .orElse(null)
+                : null;
+
         PagesOfAtlasPager.Result<SpriteContents>
             result;
 
         try {
-            result =
-                PagesOfAtlasPager.pack(
-                    sprites,
-                    maxSupportedTextureSize,
-                    maxSupportedTextureSize,
-                    mipLevel,
-                    padding
-                );
+            if (paintingBack != null) {
+                result =
+                    PagesOfAtlasPager.packWithReplicatedEntry(
+                        sprites,
+                        maxSupportedTextureSize,
+                        maxSupportedTextureSize,
+                        mipLevel,
+                        padding,
+                        paintingBack
+                    );
+            } else {
+                result =
+                    PagesOfAtlasPager.pack(
+                        sprites,
+                        maxSupportedTextureSize,
+                        maxSupportedTextureSize,
+                        mipLevel,
+                        padding
+                    );
+            }
         } catch (Throwable t) {
             PagesOfAtlasRegistry.endAtlas();
 
@@ -236,6 +270,15 @@ public abstract class SpriteLoaderMixin {
             TextureAtlasSprite firstSprite =
                 null;
 
+            TextureAtlasSprite firstAnySprite =
+                null;
+
+            Identifier physicalAtlas =
+                PagesOfAtlasRegistry.physicalAtlasLocation(
+                    location,
+                    page.number()
+                );
+
             for (
                 PagesOfAtlasPager.Placement<SpriteContents>
                     placement :
@@ -244,27 +287,73 @@ public abstract class SpriteLoaderMixin {
                 SpriteContents contents =
                     placement.entry();
 
-                PagedTextureAtlasSprite sprite =
-                    new PagedTextureAtlasSprite(
-                        location,
-                        contents,
-                        page.width(),
-                        page.height(),
-                        placement.x(),
-                        placement.y(),
-                        placement.padding(),
-                        page.number()
-                    );
+                boolean replicatedPaintingBack =
+                    paintingBack != null &&
+                    contents == paintingBack;
 
-                if (firstSprite == null) {
+                Identifier spriteAtlas =
+                    paintingAtlas
+                        ? physicalAtlas
+                        : location;
+
+                PagedTextureAtlasSprite sprite;
+
+                if (replicatedPaintingBack &&
+                    page.number() > 0) {
+
+                    sprite =
+                        new NonOwningPagedTextureAtlasSprite(
+                            spriteAtlas,
+                            contents,
+                            page.width(),
+                            page.height(),
+                            placement.x(),
+                            placement.y(),
+                            placement.padding(),
+                            page.number()
+                        );
+                } else {
+                    sprite =
+                        new PagedTextureAtlasSprite(
+                            spriteAtlas,
+                            contents,
+                            page.width(),
+                            page.height(),
+                            placement.x(),
+                            placement.y(),
+                            placement.padding(),
+                            page.number()
+                        );
+                }
+
+                if (firstAnySprite == null) {
+                    firstAnySprite =
+                        sprite;
+                }
+
+                if (firstSprite == null &&
+                    !replicatedPaintingBack) {
+
                     firstSprite =
                         sprite;
                 }
 
-                combinedRegions.put(
-                    contents.name(),
-                    sprite
-                );
+                if (replicatedPaintingBack) {
+                    /*
+                     * The logical painting atlas exposes page zero's
+                     * owning back sprite. Page-specific copies remain
+                     * reachable through their physical atlases.
+                     */
+                    combinedRegions.putIfAbsent(
+                        contents.name(),
+                        sprite
+                    );
+                } else {
+                    combinedRegions.put(
+                        contents.name(),
+                        sprite
+                    );
+                }
 
                 pageRegions.put(
                     contents.name(),
@@ -283,6 +372,11 @@ public abstract class SpriteLoaderMixin {
                     logicalMissing =
                         sprite;
                 }
+            }
+
+            if (firstSprite == null) {
+                firstSprite =
+                    firstAnySprite;
             }
 
             /*
@@ -381,9 +475,8 @@ public abstract class SpriteLoaderMixin {
                 );
 
         /*
-         * Vanilla AtlasManager receives this combined map,
-         * so all 3680 logical sprites remain available to
-         * model baking regardless of physical page.
+         * Vanilla AtlasManager receives this combined map so all
+         * logical sprites remain available regardless of page.
          */
         SpriteLoader.Preparations combined =
             new SpriteLoader.Preparations(
