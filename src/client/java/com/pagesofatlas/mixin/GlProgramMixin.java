@@ -4,6 +4,7 @@ import com.pagesofatlas.PagesOfAtlasClient;
 import com.pagesofatlas.compat.PagesOfAtlasTextureUnits;
 
 import com.mojang.blaze3d.opengl.GlProgram;
+import com.mojang.blaze3d.opengl.GlStateManager;
 import com.mojang.blaze3d.opengl.Uniform;
 
 import java.util.Map;
@@ -22,6 +23,10 @@ public abstract class GlProgramMixin {
     @Shadow
     @Final
     private Map<String, Uniform> uniformsByName;
+
+    @Shadow
+    @Final
+    private int programId;
 
     @Inject(
         method = "setupBindGroupLayouts",
@@ -84,6 +89,32 @@ public abstract class GlProgramMixin {
             "u_BlockTex3",
             PagesOfAtlasTextureUnits.page3()
         );
+
+        /*
+         * POA's standalone item shaders expose their overflow pages as
+         * Sampler3/4/5.  Once Iris correctly overrides those pipelines,
+         * the active program instead exposes the routed sampler names
+         * injected into the shader-pack program.  Alias the pipeline's
+         * binding names to those uniforms so the existing RenderSetup
+         * binds the same three textures to Iris's reserved units.
+         */
+        pagesofatlas$aliasSampler(
+            "Sampler3",
+            "u_BlockTex1",
+            PagesOfAtlasTextureUnits.page1()
+        );
+
+        pagesofatlas$aliasSampler(
+            "Sampler4",
+            "u_BlockTex2",
+            PagesOfAtlasTextureUnits.page2()
+        );
+
+        pagesofatlas$aliasSampler(
+            "Sampler5",
+            "u_BlockTex3",
+            PagesOfAtlasTextureUnits.page3()
+        );
     }
 
     private void pagesofatlas$moveSampler(
@@ -93,8 +124,26 @@ public abstract class GlProgramMixin {
         Uniform uniform =
             this.uniformsByName.get(name);
 
-        if (!(uniform instanceof Uniform.Sampler sampler)) {
-            return;
+        Uniform.Sampler sampler;
+
+        if (uniform instanceof Uniform.Sampler existing) {
+            sampler = existing;
+        } else {
+            int location =
+                GlStateManager._glGetUniformLocation(
+                    this.programId,
+                    name
+                );
+
+            if (location < 0) {
+                return;
+            }
+
+            sampler =
+                new Uniform.Sampler(
+                    location,
+                    textureUnit
+                );
         }
 
         this.uniformsByName.put(
@@ -109,6 +158,27 @@ public abstract class GlProgramMixin {
             "Assigned {} to reserved GL texture unit {}",
             name,
             textureUnit
+        );
+    }
+
+    private void pagesofatlas$aliasSampler(
+        String alias,
+        String target,
+        int textureUnit
+    ) {
+        Uniform uniform =
+            this.uniformsByName.get(target);
+
+        if (!(uniform instanceof Uniform.Sampler sampler)) {
+            return;
+        }
+
+        this.uniformsByName.put(
+            alias,
+            new Uniform.Sampler(
+                sampler.location(),
+                textureUnit
+            )
         );
     }
 }

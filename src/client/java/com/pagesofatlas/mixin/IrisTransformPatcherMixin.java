@@ -155,6 +155,71 @@ public abstract class IrisTransformPatcherMixin {
         );
     }
 
+    @Inject(
+        method = "patchVanilla",
+        at = @At("RETURN"),
+        cancellable = true,
+        remap = false
+    )
+    private static void pagesofatlas$routeEncodedItemPage(
+        String name,
+        String vertex,
+        String geometry,
+        String tessControl,
+        String tessEval,
+        String fragment,
+        @Coerce Object alphaTest,
+        boolean irisFlag0,
+        boolean irisFlag1,
+        boolean irisFlag2,
+        @Coerce Object shaderAttributeInputs,
+        @Coerce Object textureMap,
+        CallbackInfoReturnable<Map<?, String>> cir
+    ) {
+        boolean splitActive =
+            PagesOfAtlasRegistry
+                .plan(TextureAtlas.LOCATION_BLOCKS)
+                .map(plan ->
+                    plan.pageCount() > 1
+                )
+                .orElse(false);
+
+        if (!splitActive) {
+            return;
+        }
+
+        Map<?, String> original =
+            cir.getReturnValue();
+
+        if (original == null || original.isEmpty()) {
+            return;
+        }
+
+        Map<Object, String> patched =
+            new HashMap<>();
+
+        for (Map.Entry<?, String> entry :
+            original.entrySet()) {
+
+            Object key = entry.getKey();
+            String source = entry.getValue();
+
+            if (
+                source != null
+                && String.valueOf(key).contains("FRAGMENT")
+            ) {
+                source =
+                    pagesofatlas$patchEncodedItemFragment(
+                        source
+                    );
+            }
+
+            patched.put(key, source);
+        }
+
+        cir.setReturnValue(patched);
+    }
+
     private static String pagesofatlas$patchVertex(
         String source
     ) {
@@ -545,6 +610,109 @@ public abstract class IrisTransformPatcherMixin {
         }
 
         return source;
+    }
+
+    private static String pagesofatlas$patchEncodedItemFragment(
+        String source
+    ) {
+        if (source.contains("pagesofatlas_itemTexture")) {
+            return source;
+        }
+
+        String diffuseSampler =
+            pagesofatlas$findDiffuseSampler(source);
+
+        if (diffuseSampler == null) {
+            return source;
+        }
+
+        String samplerPattern =
+            Pattern.quote(diffuseSampler);
+
+        source = source.replaceAll(
+            "\\btextureGrad\\s*\\(\\s*"
+                + samplerPattern
+                + "\\s*,",
+            "pagesofatlas_itemTextureGrad("
+        );
+
+        source = source.replaceAll(
+            "\\btexture\\s*\\(\\s*"
+                + samplerPattern
+                + "\\s*,",
+            "pagesofatlas_itemTexture("
+        );
+
+        source = source.replaceAll(
+            "\\btextureLod\\s*\\(\\s*"
+                + samplerPattern
+                + "\\s*,",
+            "pagesofatlas_itemTextureLod("
+        );
+
+        Pattern functionPattern =
+            Pattern.compile(
+                "(?m)^[ \\t]*"
+                + "(?:[A-Za-z_][A-Za-z0-9_]*[ \\t]+)+"
+                + "[A-Za-z_][A-Za-z0-9_]*[ \\t]*"
+                + "\\([^;{}]*\\)[ \\t]*\\{"
+            );
+
+        Matcher matcher =
+            functionPattern.matcher(source);
+
+        if (!matcher.find()) {
+            return source;
+        }
+
+        int insertAt = matcher.start();
+
+        String helpers =
+            "uniform sampler2D u_BlockTex1;\n"
+            + "uniform sampler2D u_BlockTex2;\n"
+            + "uniform sampler2D u_BlockTex3;\n\n"
+            + "int pagesofatlas_itemPage(vec2 uv) {\n"
+            + "    return clamp(int(floor(uv.x / 2.0)), 0, 3);\n"
+            + "}\n\n"
+            + "vec2 pagesofatlas_itemUv(vec2 uv, int page) {\n"
+            + "    return vec2(uv.x - float(page) * 2.0, uv.y);\n"
+            + "}\n\n"
+            + "vec4 pagesofatlas_itemTexture(vec2 encodedUv) {\n"
+            + "    int page = pagesofatlas_itemPage(encodedUv);\n"
+            + "    vec2 uv = pagesofatlas_itemUv(encodedUv, page);\n"
+            + "    if (page == 1) return texture(u_BlockTex1, uv);\n"
+            + "    if (page == 2) return texture(u_BlockTex2, uv);\n"
+            + "    if (page == 3) return texture(u_BlockTex3, uv);\n"
+            + "    return texture(" + diffuseSampler + ", uv);\n"
+            + "}\n\n"
+            + "vec4 pagesofatlas_itemTexture(vec2 encodedUv, float bias) {\n"
+            + "    int page = pagesofatlas_itemPage(encodedUv);\n"
+            + "    vec2 uv = pagesofatlas_itemUv(encodedUv, page);\n"
+            + "    if (page == 1) return texture(u_BlockTex1, uv, bias);\n"
+            + "    if (page == 2) return texture(u_BlockTex2, uv, bias);\n"
+            + "    if (page == 3) return texture(u_BlockTex3, uv, bias);\n"
+            + "    return texture(" + diffuseSampler + ", uv, bias);\n"
+            + "}\n\n"
+            + "vec4 pagesofatlas_itemTextureGrad(vec2 encodedUv, vec2 dx, vec2 dy) {\n"
+            + "    int page = pagesofatlas_itemPage(encodedUv);\n"
+            + "    vec2 uv = pagesofatlas_itemUv(encodedUv, page);\n"
+            + "    if (page == 1) return textureGrad(u_BlockTex1, uv, dx, dy);\n"
+            + "    if (page == 2) return textureGrad(u_BlockTex2, uv, dx, dy);\n"
+            + "    if (page == 3) return textureGrad(u_BlockTex3, uv, dx, dy);\n"
+            + "    return textureGrad(" + diffuseSampler + ", uv, dx, dy);\n"
+            + "}\n\n"
+            + "vec4 pagesofatlas_itemTextureLod(vec2 encodedUv, float lod) {\n"
+            + "    int page = pagesofatlas_itemPage(encodedUv);\n"
+            + "    vec2 uv = pagesofatlas_itemUv(encodedUv, page);\n"
+            + "    if (page == 1) return textureLod(u_BlockTex1, uv, lod);\n"
+            + "    if (page == 2) return textureLod(u_BlockTex2, uv, lod);\n"
+            + "    if (page == 3) return textureLod(u_BlockTex3, uv, lod);\n"
+            + "    return textureLod(" + diffuseSampler + ", uv, lod);\n"
+            + "}\n\n";
+
+        return source.substring(0, insertAt)
+            + helpers
+            + source.substring(insertAt);
     }
 
     private static String pagesofatlas$findDiffuseSampler(
