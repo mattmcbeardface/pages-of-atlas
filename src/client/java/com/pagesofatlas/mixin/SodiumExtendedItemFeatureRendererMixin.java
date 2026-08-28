@@ -2,8 +2,6 @@ package com.pagesofatlas.mixin;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 
-import com.mojang.blaze3d.vertex.VertexConsumer;
-
 import com.pagesofatlas.PagesOfAtlasItemRendering;
 import com.pagesofatlas.PagesOfAtlasQuadTag;
 import com.pagesofatlas.compat.SodiumQuadTagAccess;
@@ -17,7 +15,6 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Coerce;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyArg;
 
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
@@ -80,27 +77,6 @@ public abstract class SodiumExtendedItemFeatureRendererMixin {
     )
     private RenderType pagesofatlas$selectItemRenderType(
         RenderType original
-    ) {
-        return PagesOfAtlasItemRendering.pageAware(
-            original
-        );
-    }
-
-    @ModifyArg(
-        method = "bufferMain",
-        at = @At(
-            value = "INVOKE",
-            target =
-                "Lnet/caffeinemc/mods/sodium/client/render/frapi/" +
-                "wrapper/MutableQuadViewWrapper;buffer(" +
-                "ILcom/mojang/blaze3d/vertex/PoseStack$Pose;" +
-                "Lcom/mojang/blaze3d/vertex/VertexConsumer;)V"
-        ),
-        index = 2,
-        remap = false
-    )
-    private VertexConsumer pagesofatlas$encodeItemPage(
-        VertexConsumer original
     ) {
         return PagesOfAtlasItemRendering.pageAware(
             original,

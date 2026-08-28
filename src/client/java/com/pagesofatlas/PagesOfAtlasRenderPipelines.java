@@ -145,34 +145,26 @@ public final class PagesOfAtlasRenderPipelines {
      * BLOCK ITEMS
      * ============================================================
      *
-     * Sampler0 = block atlas page 0
+     * Sampler0 = the physical block-atlas page selected for this draw
      * Sampler1 = vanilla overlay
      * Sampler2 = vanilla lightmap
-     * Sampler3 = block atlas page 1
-     * Sampler4 = block atlas page 2
-     * Sampler5 = block atlas page 3
+     *
+     * This deliberately matches Minecraft's ordinary item pipeline. Iris can
+     * therefore reuse its normal item/entity program without any PoA shader
+     * transformation; the originating PoA pipeline identity only selects the
+     * correct semantic override.
      */
-
-    public static final BindGroupLayout ITEM_SPLIT_SAMPLERS =
-        BindGroupLayout.builder()
-            .withSampler("Sampler0")
-            .withSampler("Sampler1")
-            .withSampler("Sampler2")
-            .withSampler("Sampler3")
-            .withSampler("Sampler4")
-            .withSampler("Sampler5")
-            .build();
 
     private static final Identifier ITEM_VERTEX_SHADER =
         Identifier.fromNamespaceAndPath(
-            "pagesofatlas",
-            "core/item_split"
+            "minecraft",
+            "core/entity"
         );
 
     private static final Identifier ITEM_FRAGMENT_SHADER =
         Identifier.fromNamespaceAndPath(
-            "pagesofatlas",
-            "core/item_split"
+            "minecraft",
+            "core/entity"
         );
 
     private static final RenderPipeline.Snippet ITEM =
@@ -186,7 +178,7 @@ public final class PagesOfAtlasRenderPipelines {
                 ITEM_FRAGMENT_SHADER
             )
             .withBindGroupLayout(
-                ITEM_SPLIT_SAMPLERS
+                BindGroupLayouts.SAMPLER0_SAMPLER2
             )
             .withVertexBinding(
                 0,

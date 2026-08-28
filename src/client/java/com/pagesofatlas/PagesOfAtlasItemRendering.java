@@ -15,9 +15,11 @@ import net.minecraft.resources.Identifier;
 /**
  * Page-aware replacements for Minecraft's two block-item render types.
  *
- * The baked quad still decides whether the draw is cutout or translucent.
- * We replace only the two vanilla block-atlas item types and leave item-atlas
- * and mod-defined render types untouched.
+ * Each physical atlas page gets a distinct RenderType, while all of those
+ * RenderTypes retain the two PoA item RenderPipeline identities registered
+ * with Iris. The selected physical page is bound as the ordinary Sampler0,
+ * so both Minecraft's item shader and an Iris shader-pack program receive
+ * normal page-local UVs and a normal diffuse texture.
  */
 public final class PagesOfAtlasItemRendering {
 
@@ -27,7 +29,8 @@ public final class PagesOfAtlasItemRendering {
         new ConcurrentHashMap<>();
 
     public static RenderType pageAware(
-        RenderType original
+        RenderType original,
+        int page
     ) {
         boolean translucent;
 
@@ -49,13 +52,17 @@ public final class PagesOfAtlasItemRendering {
                 )
                 .orElse(1);
 
-        if (pageCount <= 1) {
+        if (
+            pageCount <= 1
+            || page < 0
+            || page >= pageCount
+        ) {
             return original;
         }
 
         Key key =
             new Key(
-                pageCount,
+                page,
                 translucent
             );
 
@@ -65,7 +72,12 @@ public final class PagesOfAtlasItemRendering {
         );
     }
 
-    public static VertexConsumer pageAware(
+    /**
+     * Indigo has already added its page stride before it dispatches an item
+     * quad. Remove only that item-path encoding because page selection now
+     * lives in the RenderType's Sampler0 binding.
+     */
+    public static VertexConsumer pageLocal(
         VertexConsumer original,
         int page
     ) {
@@ -74,7 +86,7 @@ public final class PagesOfAtlasItemRendering {
         }
 
         float uOffset =
-            page * 2.0F;
+            page * PagedTextureAtlasSprite.PAGE_U_STRIDE;
 
         return new VertexConsumer() {
 
@@ -84,12 +96,7 @@ public final class PagesOfAtlasItemRendering {
                 float y,
                 float z
             ) {
-                original.addVertex(
-                    x,
-                    y,
-                    z
-                );
-
+                original.addVertex(x, y, z);
                 return this;
             }
 
@@ -100,13 +107,7 @@ public final class PagesOfAtlasItemRendering {
                 int b,
                 int a
             ) {
-                original.setColor(
-                    r,
-                    g,
-                    b,
-                    a
-                );
-
+                original.setColor(r, g, b, a);
                 return this;
             }
 
@@ -114,10 +115,7 @@ public final class PagesOfAtlasItemRendering {
             public VertexConsumer setColor(
                 int color
             ) {
-                original.setColor(
-                    color
-                );
-
+                original.setColor(color);
                 return this;
             }
 
@@ -127,10 +125,9 @@ public final class PagesOfAtlasItemRendering {
                 float v
             ) {
                 original.setUv(
-                    u + uOffset,
+                    u - uOffset,
                     v
                 );
-
                 return this;
             }
 
@@ -139,11 +136,7 @@ public final class PagesOfAtlasItemRendering {
                 int u,
                 int v
             ) {
-                original.setUv1(
-                    u,
-                    v
-                );
-
+                original.setUv1(u, v);
                 return this;
             }
 
@@ -152,11 +145,7 @@ public final class PagesOfAtlasItemRendering {
                 int u,
                 int v
             ) {
-                original.setUv2(
-                    u,
-                    v
-                );
-
+                original.setUv2(u, v);
                 return this;
             }
 
@@ -166,12 +155,7 @@ public final class PagesOfAtlasItemRendering {
                 float y,
                 float z
             ) {
-                original.setNormal(
-                    x,
-                    y,
-                    z
-                );
-
+                original.setNormal(x, y, z);
                 return this;
             }
 
@@ -179,10 +163,7 @@ public final class PagesOfAtlasItemRendering {
             public VertexConsumer setLineWidth(
                 float width
             ) {
-                original.setLineWidth(
-                    width
-                );
-
+                original.setLineWidth(width);
                 return this;
             }
         };
@@ -191,27 +172,21 @@ public final class PagesOfAtlasItemRendering {
     private static RenderType create(
         Key key
     ) {
+        var pipeline =
+            key.translucent()
+                ? PagesOfAtlasRenderPipelines.ITEM_TRANSLUCENT
+                : PagesOfAtlasRenderPipelines.ITEM_CUTOUT;
+
+        Identifier texture =
+            pageTexture(key.page());
+
         RenderSetup.RenderSetupBuilder setup =
             RenderSetup.builder(
-                key.translucent()
-                    ? PagesOfAtlasRenderPipelines.ITEM_TRANSLUCENT
-                    : PagesOfAtlasRenderPipelines.ITEM_CUTOUT
+                pipeline
             )
                 .withTexture(
                     "Sampler0",
-                    TextureAtlas.LOCATION_BLOCKS
-                )
-                .withTexture(
-                    "Sampler3",
-                    pageTexture(key.pageCount(), 1)
-                )
-                .withTexture(
-                    "Sampler4",
-                    pageTexture(key.pageCount(), 2)
-                )
-                .withTexture(
-                    "Sampler5",
-                    pageTexture(key.pageCount(), 3)
+                    texture
                 )
                 .useLightmap()
                 .useOverlay()
@@ -228,31 +203,21 @@ public final class PagesOfAtlasItemRendering {
                 .sortOnUpload();
         }
 
-        PagesOfAtlasClient.LOGGER.debug(
-            "Created {} page-aware block-item render type for {} atlas pages",
-            key.translucent()
-                ? "translucent"
-                : "cutout",
-            key.pageCount()
-        );
-
         return RenderType.create(
             "pagesofatlas_"
                 + (key.translucent()
                     ? "translucent"
                     : "cutout")
-                + "_block_item_"
-                + key.pageCount()
-                + "_pages",
+                + "_block_item_page_"
+                + key.page(),
             setup.createRenderSetup()
         );
     }
 
     private static Identifier pageTexture(
-        int pageCount,
         int page
     ) {
-        if (page >= pageCount) {
+        if (page == 0) {
             return TextureAtlas.LOCATION_BLOCKS;
         }
 
@@ -263,7 +228,7 @@ public final class PagesOfAtlasItemRendering {
     }
 
     private record Key(
-        int pageCount,
+        int page,
         boolean translucent
     ) {}
 }

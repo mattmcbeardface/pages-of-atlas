@@ -2,6 +2,14 @@
 
 Notable user-facing changes to Pages of Atlas are documented here.
 
+## [0.3.13] - 2026-08-27
+
+### Fixed
+
+- Reworked Iris multi-page item rendering so atlas pages are selected through
+  render state rather than shader-pack GLSL transformation, restoring broad
+  shader compatibility and correct multi-page GUI item rendering.
+
 ## [0.3.12] - 2026-08-27
 
 ### Fixed
@@ -41,5 +49,6 @@ Notable user-facing changes to Pages of Atlas are documented here.
 - Targets Minecraft 26.2, Fabric Loader 0.19.3 or newer, Fabric API 0.156.0 or
   newer, and Java 25.
 
+[0.3.13]: https://github.com/mattmcbeardface/pages-of-atlas/releases/tag/v0.3.13
 [0.3.12]: https://github.com/mattmcbeardface/pages-of-atlas/releases/tag/v0.3.12
 [0.3.11]: https://github.com/mattmcbeardface/pages-of-atlas/releases/tag/v0.3.11
