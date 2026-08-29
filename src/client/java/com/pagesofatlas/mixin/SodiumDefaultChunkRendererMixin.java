@@ -147,7 +147,17 @@ public abstract class SodiumDefaultChunkRendererMixin {
          * enormous startup burst.
          */
         if (PagesOfAtlasPbrDemand.required()) {
-            for (int page = 1; page < 4; page++) {
+            for (
+                PagesOfAtlasRegistry.PagePlan pagePlan :
+                plan.pages()
+            ) {
+                int page =
+                    pagePlan.page();
+
+                if (page <= 0) {
+                    continue;
+                }
+
                 if (
                     PagesOfAtlasPbrPages.existingNormalPage(
                         page
@@ -156,11 +166,13 @@ public abstract class SodiumDefaultChunkRendererMixin {
                         page
                     ) == null
                 ) {
-                    PagesOfAtlasPbrPages.requestPage(
-                        page
-                    );
-
-                    break;
+                    if (
+                        PagesOfAtlasPbrPages.requestPage(
+                            page
+                        )
+                    ) {
+                        break;
+                    }
                 }
             }
         }
@@ -171,7 +183,8 @@ public abstract class SodiumDefaultChunkRendererMixin {
             "u_BlockNormalTex1",
             "u_BlockSpecularTex1",
             pageZero,
-            sampler
+            sampler,
+            plan.pageCount() > 1
         );
 
         pagesofatlas$bindPbrPage(
@@ -180,7 +193,8 @@ public abstract class SodiumDefaultChunkRendererMixin {
             "u_BlockNormalTex2",
             "u_BlockSpecularTex2",
             pageZero,
-            sampler
+            sampler,
+            plan.pageCount() > 2
         );
 
         pagesofatlas$bindPbrPage(
@@ -189,7 +203,8 @@ public abstract class SodiumDefaultChunkRendererMixin {
             "u_BlockNormalTex3",
             "u_BlockSpecularTex3",
             pageZero,
-            sampler
+            sampler,
+            plan.pageCount() > 3
         );
     }
 
@@ -254,8 +269,25 @@ public abstract class SodiumDefaultChunkRendererMixin {
         String normalSamplerName,
         String specularSamplerName,
         GpuTextureView fallback,
-        GpuSampler sampler
+        GpuSampler sampler,
+        boolean pageExists
     ) {
+        if (!pageExists) {
+            renderPass.bindTexture(
+                normalSamplerName,
+                fallback,
+                sampler
+            );
+
+            renderPass.bindTexture(
+                specularSamplerName,
+                fallback,
+                sampler
+            );
+
+            return;
+        }
+
         GpuTextureView normal =
             PagesOfAtlasPbrPages.existingNormalPage(
                 page
@@ -292,6 +324,16 @@ public abstract class SodiumDefaultChunkRendererMixin {
         GpuTextureView fallback,
         GpuSampler sampler
     ) {
+        if (page >= plan.pageCount()) {
+            renderPass.bindTexture(
+                samplerName,
+                fallback,
+                sampler
+            );
+
+            return;
+        }
+
         var pageOptional =
             plan.page(page);
 

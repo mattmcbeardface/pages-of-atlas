@@ -196,8 +196,6 @@ public abstract class SpriteLoaderMixin {
                     );
             }
         } catch (Throwable t) {
-            PagesOfAtlasRegistry.endAtlas();
-
             PagesOfAtlasClient.LOGGER.error(
                 "PagesOfAtlas preflight failed for {}",
                 location,
@@ -212,7 +210,6 @@ public abstract class SpriteLoaderMixin {
          * Let vanilla perform its normal stitch.
          */
         if (result.pages().size() <= 1) {
-            PagesOfAtlasRegistry.endAtlas();
             return;
         }
 
@@ -526,13 +523,16 @@ public abstract class SpriteLoaderMixin {
             location,
             new PagesOfAtlasRegistry.UploadBundle(
                 combined,
-                finalPageUploads
+                finalPageUploads,
+                PagesOfAtlasRegistry.currentGeneration()
             )
         );
 
         cir.setReturnValue(
             combined
         );
+
+        PagesOfAtlasRegistry.endAtlas();
     }
 
     @Inject(
@@ -545,6 +545,17 @@ public abstract class SpriteLoaderMixin {
         Executor executor,
         CallbackInfoReturnable<SpriteLoader.Preparations> cir
     ) {
+        if (
+            PagesOfAtlasRegistry
+                .uploadBundle(location)
+                .isEmpty()
+        ) {
+            PagesOfAtlasRegistry.stageVanillaUpload(
+                location,
+                cir.getReturnValue()
+            );
+        }
+
         PagesOfAtlasRegistry.endAtlas();
     }
 }

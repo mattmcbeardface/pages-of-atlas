@@ -1,10 +1,15 @@
 package com.pagesofatlas;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+
+import com.mojang.blaze3d.systems.RenderSystem;
 
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.Stitcher;
@@ -17,7 +22,16 @@ public final class PagesOfAtlasRegistry {
     private static final ThreadLocal<Identifier> CURRENT_ATLAS =
         new ThreadLocal<>();
 
-    private static final Map<Identifier, AtlasPlan> PLANS =
+    private static final ThreadLocal<Long> CURRENT_GENERATION =
+        new ThreadLocal<>();
+
+    private static final Map<Identifier, Long> GENERATIONS =
+        new ConcurrentHashMap<>();
+
+    private static final Map<Identifier, AtlasPlan> STAGED_PLANS =
+        new ConcurrentHashMap<>();
+
+    private static final Map<Identifier, ActiveAtlas> ACTIVE_ATLASES =
         new ConcurrentHashMap<>();
 
     private static final Map<SpriteKey, Placement> PLACEMENTS =
@@ -29,43 +43,57 @@ public final class PagesOfAtlasRegistry {
     private static final Map<Identifier, UploadBundle> UPLOADS =
         new ConcurrentHashMap<>();
 
+    private static final Map<SpriteLoader.Preparations, VanillaUpload>
+        VANILLA_UPLOADS =
+            Collections.synchronizedMap(
+                new IdentityHashMap<>()
+            );
+
     public static void beginAtlas(
         Identifier atlas
     ) {
-        CURRENT_ATLAS.set(atlas);
+        synchronized (PagesOfAtlasRegistry.class) {
+            long generation =
+                GENERATIONS.merge(
+                    atlas,
+                    1L,
+                    Long::sum
+                );
 
-        /*
-         * Every atlas rebuild starts clean.
-         *
-         * This matters when the user changes resource packs
-         * without restarting Minecraft. An atlas that needed
-         * paging during the previous reload may no longer need
-         * it during the next one.
-         */
-        clearAtlas(atlas);
+            CURRENT_ATLAS.set(atlas);
+            CURRENT_GENERATION.set(generation);
+
+            clearStagedAtlas(atlas);
+        }
     }
 
     public static void endAtlas() {
         CURRENT_ATLAS.remove();
+        CURRENT_GENERATION.remove();
     }
 
     public static Identifier currentAtlas() {
         return CURRENT_ATLAS.get();
     }
 
-    public static void clearAtlas(
+    public static long currentGeneration() {
+        Long generation =
+            CURRENT_GENERATION.get();
+
+        if (generation == null) {
+            throw new IllegalStateException(
+                "No PagesOfAtlas generation is being prepared"
+            );
+        }
+
+        return generation;
+    }
+
+    private static void clearStagedAtlas(
         Identifier atlas
     ) {
-        PLANS.remove(atlas);
+        STAGED_PLANS.remove(atlas);
         UPLOADS.remove(atlas);
-
-        if (
-            atlas.equals(
-                net.minecraft.client.renderer.texture.TextureAtlas.LOCATION_BLOCKS
-            )
-        ) {
-            PagesOfAtlasPbrPages.clear();
-        }
 
         PLACEMENTS.keySet().removeIf(
             key -> key.atlas().equals(atlas)
@@ -155,76 +183,21 @@ public final class PagesOfAtlasRegistry {
             new AtlasPlan(
                 atlas,
                 List.copyOf(pagePlans),
-                spriteCount
+                spriteCount,
+                currentGeneration()
             );
 
-        PLANS.put(
+        STAGED_PLANS.put(
             atlas,
             plan
         );
 
-        PagesOfAtlasClient.LOGGER.info(
-            "Pages of Atlas active: {} -> {} pages, {} sprites",
+        PagesOfAtlasClient.LOGGER.debug(
+            "Pages of Atlas staged: {} -> {} pages, {} sprites",
             atlas,
             pagePlans.size(),
             spriteCount
         );
-
-
-        /*
-         * TEMP DIAGNOSTIC:
-         * Show physical placement for the ground textures involved
-         * in the Photon POM corruption investigation.
-         */
-        if (
-            atlas.equals(
-                net.minecraft.client.renderer.texture.TextureAtlas.LOCATION_BLOCKS
-            )
-        ) {
-            for (
-                Map.Entry<SpriteKey, Placement> entry :
-                PLACEMENTS.entrySet()
-            ) {
-                SpriteKey key =
-                    entry.getKey();
-
-                if (!key.atlas().equals(atlas)) {
-                    continue;
-                }
-
-                String name =
-                    key.sprite().toString();
-
-                if (
-                    name.contains("sand")
-                    || name.contains("grass")
-                ) {
-                    Placement placement =
-                        entry.getValue();
-
-                    SpriteDimensions dimensions =
-                        DIMENSIONS.get(key);
-
-                    PagesOfAtlasClient.LOGGER.info(
-                        "[GROUND PLACEMENT] sprite={} page={} slot={},{} padding={} dimensions={}x{} pageSize={}x{}",
-                        key.sprite(),
-                        placement.page(),
-                        placement.x(),
-                        placement.y(),
-                        placement.padding(),
-                        dimensions != null
-                            ? dimensions.width()
-                            : -1,
-                        dimensions != null
-                            ? dimensions.height()
-                            : -1,
-                        placement.pageWidth(),
-                        placement.pageHeight()
-                    );
-                }
-            }
-        }
-
         for (
             PagePlan page :
             pagePlans
@@ -242,8 +215,6 @@ public final class PagesOfAtlasRegistry {
         PagesOfAtlasPhysicalAtlases.ensureRegistered(
             plan
         );
-
-        CURRENT_ATLAS.remove();
     }
 
     public static void publishUploadBundle(
@@ -264,26 +235,58 @@ public final class PagesOfAtlasRegistry {
         );
     }
 
+    public static boolean isStagedGeneration(
+        Identifier logicalAtlas,
+        long generation
+    ) {
+        AtlasPlan staged =
+            STAGED_PLANS.get(logicalAtlas);
+
+        return
+            staged != null
+            && staged.generation() == generation
+            && GENERATIONS.getOrDefault(
+                logicalAtlas,
+                -1L
+            ) == generation;
+    }
+
     public static Optional<AtlasPlan> plan(
         Identifier logicalAtlas
     ) {
-        return Optional.ofNullable(
-            PLANS.get(logicalAtlas)
-        );
+        ActiveAtlas active =
+            ACTIVE_ATLASES.get(logicalAtlas);
+
+        return active == null
+            ? Optional.empty()
+            : Optional.of(active.plan());
     }
 
     public static Optional<Placement> lookup(
         Identifier atlas,
         Identifier sprite
     ) {
-        return Optional.ofNullable(
-            PLACEMENTS.get(
-                new SpriteKey(
-                    atlas,
-                    sprite
-                )
-            )
-        );
+        SpriteKey key =
+            new SpriteKey(
+                atlas,
+                sprite
+            );
+
+        Placement staged =
+            PLACEMENTS.get(key);
+
+        if (atlas.equals(CURRENT_ATLAS.get())) {
+            return Optional.ofNullable(staged);
+        }
+
+        ActiveAtlas active =
+            ACTIVE_ATLASES.get(atlas);
+
+        return active == null
+            ? Optional.empty()
+            : Optional.ofNullable(
+                active.placements().get(key)
+            );
     }
 
     public static void recordSpriteDimensions(
@@ -308,8 +311,15 @@ public final class PagesOfAtlasRegistry {
         Identifier atlas,
         Identifier sprite
     ) {
+        ActiveAtlas active =
+            ACTIVE_ATLASES.get(atlas);
+
+        if (active == null) {
+            return Optional.empty();
+        }
+
         return Optional.ofNullable(
-            DIMENSIONS.get(
+            active.dimensions().get(
                 new SpriteKey(
                     atlas,
                     sprite
@@ -325,9 +335,16 @@ public final class PagesOfAtlasRegistry {
         List<PlacedSprite> result =
             new ArrayList<>();
 
+        ActiveAtlas active =
+            ACTIVE_ATLASES.get(atlas);
+
+        if (active == null) {
+            return List.of();
+        }
+
         for (
             Map.Entry<SpriteKey, Placement> entry :
-            PLACEMENTS.entrySet()
+            active.placements().entrySet()
         ) {
             SpriteKey key =
                 entry.getKey();
@@ -357,6 +374,166 @@ public final class PagesOfAtlasRegistry {
         );
 
         return List.copyOf(result);
+    }
+
+    public static void stageVanillaUpload(
+        Identifier logicalAtlas,
+        SpriteLoader.Preparations preparations
+    ) {
+        long generation =
+            currentGeneration();
+
+        VANILLA_UPLOADS.put(
+            preparations,
+            new VanillaUpload(
+                logicalAtlas,
+                generation
+            )
+        );
+
+        PagesOfAtlasPhysicalAtlases.publishVanillaAtlas(
+            logicalAtlas,
+            generation
+        );
+    }
+
+    public static boolean activatePaged(
+        Identifier logicalAtlas,
+        UploadBundle bundle
+    ) {
+        RenderSystem.assertOnRenderThread();
+
+        AtlasPlan staged;
+
+        synchronized (PagesOfAtlasRegistry.class) {
+            staged =
+                STAGED_PLANS.get(logicalAtlas);
+
+            if (
+                staged == null
+                || staged.generation()
+                    != bundle.generation()
+                || GENERATIONS.getOrDefault(
+                    logicalAtlas,
+                    -1L
+                ) != bundle.generation()
+            ) {
+                return false;
+            }
+
+            ACTIVE_ATLASES.put(
+                logicalAtlas,
+                new ActiveAtlas(
+                    staged,
+                    stagedPlacements(logicalAtlas),
+                    stagedDimensions(logicalAtlas)
+                )
+            );
+
+            STAGED_PLANS.remove(
+                logicalAtlas,
+                staged
+            );
+        }
+
+        if (
+            logicalAtlas.equals(
+                net.minecraft.client.renderer.texture.TextureAtlas.LOCATION_BLOCKS
+            )
+        ) {
+            PagesOfAtlasPbrPages.clear();
+        }
+
+        PagesOfAtlasClient.LOGGER.info(
+            "Pages of Atlas active: {} -> {} pages, {} sprites (generation {})",
+            logicalAtlas,
+            staged.pageCount(),
+            staged.spriteCount(),
+            staged.generation()
+        );
+
+        return true;
+    }
+
+    public static long activateVanilla(
+        Identifier logicalAtlas,
+        SpriteLoader.Preparations preparations
+    ) {
+        RenderSystem.assertOnRenderThread();
+
+        VanillaUpload upload =
+            VANILLA_UPLOADS.remove(preparations);
+
+        if (
+            upload == null
+            || !upload.logicalAtlas()
+                .equals(logicalAtlas)
+        ) {
+            return -1L;
+        }
+
+        synchronized (PagesOfAtlasRegistry.class) {
+            if (
+                GENERATIONS.getOrDefault(
+                    logicalAtlas,
+                    -1L
+                ) != upload.generation()
+            ) {
+                return -1L;
+            }
+
+            ACTIVE_ATLASES.remove(logicalAtlas);
+            STAGED_PLANS.remove(logicalAtlas);
+        }
+
+        if (
+            logicalAtlas.equals(
+                net.minecraft.client.renderer.texture.TextureAtlas.LOCATION_BLOCKS
+            )
+        ) {
+            PagesOfAtlasPbrPages.clear();
+        }
+
+        return upload.generation();
+    }
+
+    private static Map<SpriteKey, Placement> stagedPlacements(
+        Identifier logicalAtlas
+    ) {
+        Map<SpriteKey, Placement> result =
+            new HashMap<>();
+
+        for (Map.Entry<SpriteKey, Placement> entry : PLACEMENTS.entrySet()) {
+            if (entry.getKey().atlas().equals(logicalAtlas)) {
+                result.put(
+                    entry.getKey(),
+                    entry.getValue()
+                );
+            }
+        }
+
+        return Map.copyOf(result);
+    }
+
+    private static Map<SpriteKey, SpriteDimensions> stagedDimensions(
+        Identifier logicalAtlas
+    ) {
+        Map<SpriteKey, SpriteDimensions> result =
+            new HashMap<>();
+
+        for (
+            Map.Entry<SpriteKey, SpriteDimensions> entry :
+            DIMENSIONS.entrySet()
+        ) {
+            if (entry.getKey().atlas().equals(logicalAtlas)) {
+                result.put(
+                    entry.getKey(),
+                    entry.getValue()
+                );
+            }
+        }
+
+        return Map.copyOf(result);
     }
 
     public static Identifier physicalAtlasLocation(
@@ -427,7 +604,8 @@ public final class PagesOfAtlasRegistry {
     public record AtlasPlan(
         Identifier logicalAtlas,
         List<PagePlan> pages,
-        int spriteCount
+        int spriteCount,
+        long generation
     ) {
         public int pageCount() {
             return pages.size();
@@ -454,7 +632,19 @@ public final class PagesOfAtlasRegistry {
 
     public record UploadBundle(
         SpriteLoader.Preparations combined,
-        List<PageUpload> pages
+        List<PageUpload> pages,
+        long generation
+    ) {}
+
+    private record ActiveAtlas(
+        AtlasPlan plan,
+        Map<SpriteKey, Placement> placements,
+        Map<SpriteKey, SpriteDimensions> dimensions
+    ) {}
+
+    private record VanillaUpload(
+        Identifier logicalAtlas,
+        long generation
     ) {}
 
     private record SpriteKey(

@@ -2,6 +2,7 @@ package com.pagesofatlas.mixin;
 
 import com.pagesofatlas.PagesOfAtlasClient;
 import com.pagesofatlas.PagesOfAtlasDirectUploader;
+import com.pagesofatlas.PagesOfAtlasPhysicalAtlases;
 import com.pagesofatlas.PagesOfAtlasRegistry;
 
 import net.minecraft.client.Minecraft;
@@ -119,6 +120,18 @@ public abstract class TextureAtlasMixin {
         PagesOfAtlasRegistry.UploadBundle bundle =
             bundleOptional.get();
 
+        if (
+            preparations != bundle.combined()
+            ||
+            !PagesOfAtlasRegistry.isStagedGeneration(
+                location,
+                bundle.generation()
+            )
+        ) {
+            ci.cancel();
+            return;
+        }
+
         pagesofatlas$internalUpload.set(true);
 
         try {
@@ -177,6 +190,11 @@ public abstract class TextureAtlasMixin {
 
             }
 
+            pagesofatlas$validatePhysicalPages(
+                textureManager,
+                bundle
+            );
+
             if (location.equals(Sheets.PAINTINGS_SHEET)) {
                 /*
                  * TextureAtlas.upload(pageZero) installs page zero's
@@ -201,6 +219,18 @@ public abstract class TextureAtlasMixin {
                         .missing();
             }
 
+            if (
+                PagesOfAtlasRegistry.activatePaged(
+                    location,
+                    bundle
+                )
+            ) {
+                PagesOfAtlasPhysicalAtlases.completePagedAtlas(
+                    location,
+                    bundle
+                );
+            }
+
             /*
              * We already uploaded the logical atlas as its
              * individual physical pages. Do NOT let vanilla
@@ -223,6 +253,71 @@ public abstract class TextureAtlasMixin {
 
         } finally {
             pagesofatlas$internalUpload.set(false);
+        }
+    }
+
+    @Inject(
+        method = "upload",
+        at = @At("RETURN")
+    )
+    private void pagesofatlas$completeVanillaUpload(
+        SpriteLoader.Preparations preparations,
+        CallbackInfo ci
+    ) {
+        if (
+            pagesofatlas$internalUpload.get()
+            || PagesOfAtlasRegistry
+                .uploadBundle(location)
+                .isPresent()
+        ) {
+            return;
+        }
+
+        long generation =
+            PagesOfAtlasRegistry.activateVanilla(
+                location,
+                preparations
+            );
+
+        if (generation >= 0) {
+            PagesOfAtlasPhysicalAtlases.completeVanillaAtlas(
+                location,
+                generation
+            );
+        }
+    }
+
+    @Unique
+    private static void pagesofatlas$validatePhysicalPages(
+        TextureManager textureManager,
+        PagesOfAtlasRegistry.UploadBundle bundle
+    ) {
+        for (
+            PagesOfAtlasRegistry.PageUpload page :
+            bundle.pages()
+        ) {
+            if (page.page() <= 0) {
+                continue;
+            }
+
+            AbstractTexture texture =
+                textureManager.getTexture(
+                    page.physicalAtlas()
+                );
+
+            if (!(texture instanceof TextureAtlas)) {
+                throw new IllegalStateException(
+                    "PagesOfAtlas physical page did not remain a TextureAtlas: "
+                        + page.physicalAtlas()
+                );
+            }
+
+            /*
+             * getTextureView() throws if upload() has not initialized
+             * the GPU texture. Reaching activation therefore proves
+             * every secondary page in this generation is renderable.
+             */
+            texture.getTextureView();
         }
     }
 }

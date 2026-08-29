@@ -1,11 +1,14 @@
 package com.pagesofatlas;
 
 import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.systems.RenderSystem;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -38,13 +41,35 @@ public final class PagesOfAtlasPbrPages {
         BUILDING =
             new HashSet<>();
 
+    private static final Set<Integer>
+        FAILED =
+            new HashSet<>();
+
     private PagesOfAtlasPbrPages() {}
 
-    public static synchronized void requestPage(
+    public static synchronized boolean requestPage(
         int page
     ) {
-        if (page < 0 || page > 3) {
-            return;
+        if (
+            page <= 0
+            || page > 3
+            || FAILED.contains(page)
+        ) {
+            return false;
+        }
+
+        var planOptional =
+            PagesOfAtlasRegistry.plan(
+                TextureAtlas.LOCATION_BLOCKS
+            );
+
+        if (
+            planOptional.isEmpty()
+            || planOptional.get()
+                .page(page)
+                .isEmpty()
+        ) {
+            return false;
         }
 
         PagesOfAtlasPbrPage existing =
@@ -54,10 +79,11 @@ public final class PagesOfAtlasPbrPages {
             existing != null
             && existing.allocated()
         ) {
-            return;
+            return false;
         }
 
         REQUESTED.add(page);
+        return true;
     }
 
     public static synchronized void buildRequestedPages() {
@@ -159,6 +185,9 @@ public final class PagesOfAtlasPbrPages {
             );
 
         } catch (Throwable t) {
+            REQUESTED.remove(page);
+            FAILED.add(page);
+
             PagesOfAtlasClient.LOGGER.error(
                 "[PBR PAGE] Failed building page {}",
                 page,
@@ -221,21 +250,51 @@ public final class PagesOfAtlasPbrPages {
             && existing.allocated();
     }
 
-    public static synchronized void clear() {
+    public static void clear() {
+        List<PagesOfAtlasPbrPage> detached;
 
-        for (
-            PagesOfAtlasPbrPage page :
-            PAGES.values()
-        ) {
-            page.close();
+        synchronized (PagesOfAtlasPbrPages.class) {
+            detached =
+                List.copyOf(
+                    PAGES.values()
+                );
+
+            PAGES.clear();
+            REQUESTED.clear();
+            BUILDING.clear();
+            FAILED.clear();
         }
 
-        PAGES.clear();
-        REQUESTED.clear();
-        BUILDING.clear();
+        closeDetached(detached);
 
         PagesOfAtlasClient.LOGGER.info(
             "[PBR PAGE] Cleared POA PBR pages"
         );
+    }
+
+    private static void closeDetached(
+        List<PagesOfAtlasPbrPage> detached
+    ) {
+        if (detached.isEmpty()) {
+            return;
+        }
+
+        Runnable close = () -> {
+            RenderSystem.assertOnRenderThread();
+
+            for (PagesOfAtlasPbrPage page : detached) {
+                page.close();
+            }
+        };
+
+        if (RenderSystem.isOnRenderThread()) {
+            close.run();
+            return;
+        }
+
+        Minecraft.getInstance().execute(() -> {
+            RenderSystem.assertOnRenderThread();
+            RenderSystem.queueFencedTask(close);
+        });
     }
 }

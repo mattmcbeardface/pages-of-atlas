@@ -2,11 +2,8 @@ package com.pagesofatlas.mixin;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 
-import com.pagesofatlas.PagesOfAtlasClient;
 import com.pagesofatlas.PagesOfAtlasQuadTag;
 import com.pagesofatlas.compat.SodiumQuadTagAccess;
-
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
@@ -26,18 +23,18 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class SodiumBlockRendererMixin {
 
     @Unique
-    private static final ThreadLocal<Integer>
-        pagesofatlas$currentPage =
-            ThreadLocal.withInitial(() -> 0);
+    private static final int
+        pagesofatlas$NO_PAGE =
+            -1;
 
-    /*
-     * Bit N means we have already logged physical page N.
-     * Atomic because Sodium builds chunks on worker threads.
-     */
     @Unique
-    private static final AtomicInteger
-        pagesofatlas$seenPages =
-            new AtomicInteger();
+    private static final ThreadLocal<int[]>
+        pagesofatlas$currentPage =
+            ThreadLocal.withInitial(
+                () -> new int[] {
+                    pagesofatlas$NO_PAGE
+                }
+            );
 
     @Inject(
         method = "processQuad",
@@ -62,20 +59,8 @@ public abstract class SodiumBlockRendererMixin {
 
         page &= 0x3;
 
-        pagesofatlas$currentPage.set(page);
-
-        int bit = 1 << page;
-        int previous =
-            pagesofatlas$seenPages.getAndUpdate(
-                value -> value | bit
-            );
-
-        if ((previous & bit) == 0) {
-            PagesOfAtlasClient.LOGGER.info(
-                "Sodium terrain received PagesOfAtlas page {}",
-                page
-            );
-        }
+        pagesofatlas$currentPage.get()[0] =
+            page;
     }
 
     @ModifyExpressionValue(
@@ -91,7 +76,11 @@ public abstract class SodiumBlockRendererMixin {
         int original
     ) {
         int page =
-            pagesofatlas$currentPage.get();
+            pagesofatlas$currentPage.get()[0];
+
+        if (page == pagesofatlas$NO_PAGE) {
+            page = 0;
+        }
 
         return original
             | ((page & 0x3) << 3);
@@ -106,6 +95,7 @@ public abstract class SodiumBlockRendererMixin {
         @Coerce Object quad,
         CallbackInfo ci
     ) {
-        pagesofatlas$currentPage.remove();
+        pagesofatlas$currentPage.get()[0] =
+            pagesofatlas$NO_PAGE;
     }
 }
