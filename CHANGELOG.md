@@ -2,6 +2,17 @@
 
 Notable user-facing changes to Pages of Atlas are documented here.
 
+## [0.3.15] - 2026-09-07
+
+### Fixed
+
+- Fixed block-item textures on secondary physical atlas pages rendering gray
+  in inventory and hotbar GUI slots.
+- Aligned page-specific item pipelines with Minecraft 26.2's native item
+  shader and complete diffuse, overlay, and lightmap sampler contract.
+- Preserved per-quad physical-page routing for item models whose quads span
+  multiple atlas pages.
+
 ## [0.3.14] - 2026-08-29
 
 ### Fixed
@@ -75,6 +86,7 @@ Notable user-facing changes to Pages of Atlas are documented here.
 - Targets Minecraft 26.2, Fabric Loader 0.19.3 or newer, Fabric API 0.156.0 or
   newer, and Java 25.
 
+[0.3.15]: https://github.com/mattmcbeardface/pages-of-atlas/releases/tag/v0.3.15
 [0.3.14]: https://github.com/mattmcbeardface/pages-of-atlas/releases/tag/v0.3.14
 [0.3.13]: https://github.com/mattmcbeardface/pages-of-atlas/releases/tag/v0.3.13
 [0.3.12]: https://github.com/mattmcbeardface/pages-of-atlas/releases/tag/v0.3.12

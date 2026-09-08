@@ -150,46 +150,22 @@ public final class PagesOfAtlasRenderPipelines {
      * Sampler2 = vanilla lightmap
      *
      * This deliberately matches Minecraft's ordinary item pipeline. Iris can
-     * therefore reuse its normal item/entity program without any PoA shader
+     * therefore reuse its normal item program without any PoA shader
      * transformation; the originating PoA pipeline identity only selects the
      * correct semantic override.
      */
 
-    private static final Identifier ITEM_VERTEX_SHADER =
-        Identifier.fromNamespaceAndPath(
-            "minecraft",
-            "core/entity"
-        );
-
-    private static final Identifier ITEM_FRAGMENT_SHADER =
-        Identifier.fromNamespaceAndPath(
-            "minecraft",
-            "core/entity"
-        );
-
+    /*
+     * Keep this derived from Minecraft's item snippet rather than copying
+     * the superficially similar entity pipeline. GUI and hotbar items are
+     * rendered into GuiItemAtlas outside Iris's level-rendering scope, so
+     * this native fallback must preserve the item shader and its complete
+     * Sampler0/Sampler1/Sampler2 contract on its own.
+     */
     private static final RenderPipeline.Snippet ITEM =
         RenderPipeline.builder(
-            RenderPipelines.MATRICES_FOG_LIGHT_DIR_SNIPPET
+            RenderPipelines.ITEM_SNIPPET
         )
-            .withVertexShader(
-                ITEM_VERTEX_SHADER
-            )
-            .withFragmentShader(
-                ITEM_FRAGMENT_SHADER
-            )
-            .withBindGroupLayout(
-                BindGroupLayouts.SAMPLER0_SAMPLER2
-            )
-            .withVertexBinding(
-                0,
-                DefaultVertexFormat.ENTITY
-            )
-            .withPrimitiveTopology(
-                PrimitiveTopology.QUADS
-            )
-            .withDepthStencilState(
-                DepthStencilState.DEFAULT
-            )
             .buildSnippet();
 
     public static final RenderPipeline ITEM_CUTOUT =
