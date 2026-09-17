@@ -15,5 +15,17 @@ public final class PagesOfAtlasClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         LOGGER.info("PagesOfAtlas initialized");
+
+        if (PagesOfAtlasVirtualAtlas.enabled()) {
+            LOGGER.warn(
+                "[VIRTUAL ATLAS POC] Enabled: block terrain uses a logical 32768x32768 atlas backed by four physical pages"
+            );
+        } else {
+            LOGGER.info(
+                "[VIRTUAL ATLAS POC] Disabled; using the legacy page-propagation path (enable with -D{}=true or {})",
+                PagesOfAtlasVirtualAtlas.PROPERTY,
+                PagesOfAtlasVirtualAtlas.ENABLE_MARKER
+            );
+        }
     }
 }

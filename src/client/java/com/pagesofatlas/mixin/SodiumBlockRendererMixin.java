@@ -3,6 +3,8 @@ package com.pagesofatlas.mixin;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 
 import com.pagesofatlas.PagesOfAtlasQuadTag;
+import com.pagesofatlas.PagesOfAtlasVirtualAtlas;
+import com.pagesofatlas.VirtualAtlasDiagnostics;
 import com.pagesofatlas.compat.SodiumQuadTagAccess;
 
 import org.spongepowered.asm.mixin.Mixin;
@@ -45,6 +47,17 @@ public abstract class SodiumBlockRendererMixin {
         @Coerce Object quad,
         CallbackInfo ci
     ) {
+        if (PagesOfAtlasVirtualAtlas.enabled()) {
+            if (VirtualAtlasDiagnostics.enabled()) {
+                VirtualAtlasDiagnostics.inspectSodium(
+                    "Sodium final terrain compilation",
+                    quad
+                );
+            }
+
+            return;
+        }
+
         int page = 0;
 
         if (quad instanceof SodiumQuadTagAccess access) {
@@ -75,6 +88,10 @@ public abstract class SodiumBlockRendererMixin {
     private int pagesofatlas$encodePageInMaterial(
         int original
     ) {
+        if (PagesOfAtlasVirtualAtlas.enabled()) {
+            return original;
+        }
+
         int page =
             pagesofatlas$currentPage.get()[0];
 
@@ -95,6 +112,10 @@ public abstract class SodiumBlockRendererMixin {
         @Coerce Object quad,
         CallbackInfo ci
     ) {
+        if (PagesOfAtlasVirtualAtlas.enabled()) {
+            return;
+        }
+
         pagesofatlas$currentPage.get()[0] =
             pagesofatlas$NO_PAGE;
     }

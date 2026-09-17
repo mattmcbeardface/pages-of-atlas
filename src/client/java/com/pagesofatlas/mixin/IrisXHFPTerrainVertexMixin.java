@@ -1,5 +1,7 @@
 package com.pagesofatlas.mixin;
 
+import com.pagesofatlas.PagesOfAtlasVirtualAtlas;
+
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 
@@ -66,8 +68,10 @@ public abstract class IrisXHFPTerrainVertexMixin {
          * Sodium material bits 3-4 therefore need to move into
          * bits 19-20 of this packed integer.
          */
-        packed |=
-            (materialBits & 0x18) << 16;
+        if (!PagesOfAtlasVirtualAtlas.enabled()) {
+            packed |=
+                (materialBits & 0x18) << 16;
+        }
 
         return packed;
     }

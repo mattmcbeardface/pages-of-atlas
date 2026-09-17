@@ -1,6 +1,8 @@
 package com.pagesofatlas.mixin;
 
+import com.pagesofatlas.PagesOfAtlasClient;
 import com.pagesofatlas.PagesOfAtlasRegistry;
+import com.pagesofatlas.PagesOfAtlasVirtualAtlas;
 
 import net.minecraft.client.renderer.texture.TextureAtlas;
 
@@ -63,6 +65,16 @@ public abstract class IrisTransformPatcherMixin {
             "\\buniform\\s+sampler2D\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*;"
         );
 
+    private static final Pattern MAIN_ENTRY_PATTERN =
+        Pattern.compile(
+            "\\bvoid\\s+main\\s*\\(\\s*(?:void\\s*)?\\)"
+        );
+
+    private static final Pattern VERT_INIT_DECLARATION_PATTERN =
+        Pattern.compile(
+            "\\bvoid\\s+_vert_init\\s*\\(\\s*(?:void\\s*)?\\)"
+        );
+
     @Inject(
         method = "patchSodium",
         at = @At("RETURN"),
@@ -110,6 +122,33 @@ public abstract class IrisTransformPatcherMixin {
         Map<Object, String> patched =
             new HashMap<>();
 
+        boolean virtualAtlas =
+            PagesOfAtlasVirtualAtlas.enabled();
+
+        String virtualDiffuseSampler = null;
+
+        if (virtualAtlas) {
+            for (Map.Entry<?, String> entry : original.entrySet()) {
+                String stage =
+                    String.valueOf(entry.getKey())
+                        .toUpperCase();
+
+                if (
+                    stage.contains("FRAGMENT")
+                    && entry.getValue() != null
+                ) {
+                    virtualDiffuseSampler =
+                        pagesofatlas$findDiffuseSampler(
+                            entry.getValue()
+                        );
+
+                    if (virtualDiffuseSampler != null) {
+                        break;
+                    }
+                }
+            }
+        }
+
         for (Map.Entry<?, String> entry : original.entrySet()) {
             Object key =
                 entry.getKey();
@@ -132,12 +171,24 @@ public abstract class IrisTransformPatcherMixin {
 
             if (stage.contains("VERTEX")) {
                 source =
-                    pagesofatlas$patchVertex(
-                        source
-                    );
+                    virtualAtlas
+                        ? pagesofatlas$patchVirtualVertex(
+                            source,
+                            virtualDiffuseSampler
+                        )
+                        : pagesofatlas$patchVertex(
+                            source
+                        );
             }
 
             if (stage.contains("FRAGMENT")) {
+                if (virtualAtlas) {
+                    source =
+                        pagesofatlas$patchVirtualAtlasSize(
+                            source
+                        );
+                }
+
                 source =
                     pagesofatlas$patchFragment(
                         source
@@ -152,6 +203,158 @@ public abstract class IrisTransformPatcherMixin {
 
         cir.setReturnValue(
             patched
+        );
+    }
+
+    private static String pagesofatlas$patchVirtualVertex(
+        String source,
+        String diffuseSampler
+    ) {
+        if (diffuseSampler == null) {
+            PagesOfAtlasClient.LOGGER.error(
+                "[VIRTUAL ATLAS POC] Iris terrain vertex could not identify the matching diffuse sampler"
+            );
+
+            return pagesofatlas$patchVertex(source);
+        }
+
+        String rawUv =
+            "(_vert_tex_diffuse_coord_bias * u_TexCoordShrink) + _vert_tex_diffuse_coord";
+
+        Matcher mainEntry =
+            MAIN_ENTRY_PATTERN.matcher(source);
+
+        Matcher vertInitDeclaration =
+            VERT_INIT_DECLARATION_PATTERN.matcher(source);
+
+        if (
+            !mainEntry.find()
+            || !vertInitDeclaration.find()
+            || vertInitDeclaration.start() >= mainEntry.start()
+            || !source.contains("_vert_init();")
+        ) {
+            PagesOfAtlasClient.LOGGER.error(
+                "[VIRTUAL ATLAS POC] Iris terrain vertex entry point or initialization anchor was not found; leaving shader unchanged"
+            );
+
+            return source;
+        }
+
+        int main =
+            mainEntry.start();
+
+        int declarations =
+            vertInitDeclaration.start();
+
+        String pageSamplerDeclarations =
+            (source.contains(
+                "uniform sampler2D "
+                    + diffuseSampler
+                    + ";"
+            )
+                ? ""
+                : "uniform sampler2D "
+                    + diffuseSampler
+                    + ";\n")
+            + (source.contains("uniform sampler2D u_BlockTex1;")
+                ? ""
+                : "uniform sampler2D u_BlockTex1;\n")
+            + (source.contains("uniform sampler2D u_BlockTex2;")
+                ? ""
+                : "uniform sampler2D u_BlockTex2;\n")
+            + (source.contains("uniform sampler2D u_BlockTex3;")
+                ? ""
+                : "uniform sampler2D u_BlockTex3;\n");
+
+        String earlyGlobals =
+            "flat out uint pagesofatlas_page;\n"
+            + "flat out ivec2 pagesofatlas_atlasSize;\n"
+            + "vec2 pagesofatlas_local_uv;\n"
+            + "vec2 pagesofatlas_local_mid_uv;\n";
+
+        String helpers =
+            pageSamplerDeclarations
+            + "ivec2 pagesofatlas_physical_size(uint page) {\n"
+            + "    if (page == 1u) return textureSize(u_BlockTex1, 0);\n"
+            + "    if (page == 2u) return textureSize(u_BlockTex2, 0);\n"
+            + "    if (page == 3u) return textureSize(u_BlockTex3, 0);\n"
+            + "    return textureSize("
+            + diffuseSampler
+            + ", 0);\n"
+            + "}\n"
+            + "vec2 pagesofatlas_to_local(vec2 virtualUv, uint page, ivec2 physicalSize) {\n"
+            + "    uvec2 cell = uvec2(page & 1u, (page >> 1u) & 1u);\n"
+            + "    vec2 pagePixel = virtualUv * 32768.0 - vec2(cell) * 16384.0;\n"
+            + "    return pagePixel / vec2(physicalSize);\n"
+            + "}\n";
+
+        source =
+            source.substring(0, declarations)
+                + earlyGlobals
+                + source.substring(declarations, main)
+                + helpers
+                + source.substring(main);
+
+        source =
+            pagesofatlas$patchVirtualAtlasSize(
+                source
+            );
+
+        source =
+            source.replace(
+                rawUv,
+                "pagesofatlas_local_uv"
+            );
+
+        source =
+            source.replace(
+                "iris_MidTex.t",
+                "pagesofatlas_local_mid_uv.t"
+            );
+
+        source =
+            source.replace(
+                "(mat4(1.0f) * iris_MidTex)",
+                "vec4(pagesofatlas_local_mid_uv, 0.0f, 1.0f)"
+            );
+
+        String initialization =
+            "_vert_init();\n"
+            + "    vec2 pagesofatlas_virtual_uv = "
+            + rawUv
+            + ";\n"
+            + "    uvec2 pagesofatlas_cell = uvec2(floor(pagesofatlas_virtual_uv * 2.0));\n"
+            + "    pagesofatlas_page = pagesofatlas_cell.y * 2u + pagesofatlas_cell.x;\n"
+            + "    pagesofatlas_atlasSize = pagesofatlas_physical_size(pagesofatlas_page);\n"
+            + "    pagesofatlas_local_uv = pagesofatlas_to_local(pagesofatlas_virtual_uv, pagesofatlas_page, pagesofatlas_atlasSize);\n"
+            + "    pagesofatlas_local_mid_uv = pagesofatlas_to_local(iris_MidTex.st, pagesofatlas_page, pagesofatlas_atlasSize);";
+
+        source =
+            source.replace(
+                "_vert_init();",
+                initialization
+            );
+
+        PagesOfAtlasClient.LOGGER.debug(
+            "[VIRTUAL ATLAS POC] Iris vertex derives page/local UV from the final 32K normalized UV using {}",
+            diffuseSampler
+        );
+
+        return source;
+    }
+
+    private static String pagesofatlas$patchVirtualAtlasSize(
+        String source
+    ) {
+        source =
+            source.replaceAll(
+                "\\buniform\\s+ivec2\\s+atlasSize\\s*;",
+                ""
+            );
+
+        return source.replaceAll(
+            "\\batlasSize\\b",
+            "pagesofatlas_atlasSize"
         );
     }
 
@@ -392,6 +595,17 @@ public abstract class IrisTransformPatcherMixin {
             );
         }
 
+        if (
+            PagesOfAtlasVirtualAtlas.enabled()
+            && !source.contains(
+                "flat in ivec2 pagesofatlas_atlasSize;"
+            )
+        ) {
+            injection.append(
+                "flat in ivec2 pagesofatlas_atlasSize;\n"
+            );
+        }
+
         if (!source.contains(
                 "uniform sampler2D u_BlockTex1;")) {
 
@@ -424,43 +638,26 @@ public abstract class IrisTransformPatcherMixin {
                 + "vec4 pagesofatlas_texture(vec2 uv) {\n"
                 + "    vec2 pagesofatlas_dx = dFdx(uv);\n"
                 + "    vec2 pagesofatlas_dy = dFdy(uv);\n"
+                + "    vec2 pagesofatlas_size = vec2(pagesofatlas_atlasSize);\n"
+                + "    vec2 pagesofatlas_dx_texel = pagesofatlas_dx * pagesofatlas_size;\n"
+                + "    vec2 pagesofatlas_dy_texel = pagesofatlas_dy * pagesofatlas_size;\n"
+                + "    float pagesofatlas_rho = max(length(pagesofatlas_dx_texel), length(pagesofatlas_dy_texel));\n"
+                + "    float pagesofatlas_lod = log2(max(pagesofatlas_rho, 1.0));\n"
                 + "    if (pagesofatlas_page == 1u) {\n"
-                + "        vec2 pagesofatlas_size = vec2(textureSize(u_BlockTex1, 0));\n"
-                + "        vec2 pagesofatlas_dx_texel = pagesofatlas_dx * pagesofatlas_size;\n"
-                + "        vec2 pagesofatlas_dy_texel = pagesofatlas_dy * pagesofatlas_size;\n"
-                + "        float pagesofatlas_rho = max(length(pagesofatlas_dx_texel), length(pagesofatlas_dy_texel));\n"
-                + "        float pagesofatlas_lod = log2(max(pagesofatlas_rho, 1.0));\n"
                 + "        return textureLod(u_BlockTex1, uv, clamp(pagesofatlas_lod, 0.0, "
                 + maxMipLiteral
                 + "));\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 2u) {\n"
-                + "        vec2 pagesofatlas_size = vec2(textureSize(u_BlockTex2, 0));\n"
-                + "        vec2 pagesofatlas_dx_texel = pagesofatlas_dx * pagesofatlas_size;\n"
-                + "        vec2 pagesofatlas_dy_texel = pagesofatlas_dy * pagesofatlas_size;\n"
-                + "        float pagesofatlas_rho = max(length(pagesofatlas_dx_texel), length(pagesofatlas_dy_texel));\n"
-                + "        float pagesofatlas_lod = log2(max(pagesofatlas_rho, 1.0));\n"
                 + "        return textureLod(u_BlockTex2, uv, clamp(pagesofatlas_lod, 0.0, "
                 + maxMipLiteral
                 + "));\n"
                 + "    }\n"
                 + "    if (pagesofatlas_page == 3u) {\n"
-                + "        vec2 pagesofatlas_size = vec2(textureSize(u_BlockTex3, 0));\n"
-                + "        vec2 pagesofatlas_dx_texel = pagesofatlas_dx * pagesofatlas_size;\n"
-                + "        vec2 pagesofatlas_dy_texel = pagesofatlas_dy * pagesofatlas_size;\n"
-                + "        float pagesofatlas_rho = max(length(pagesofatlas_dx_texel), length(pagesofatlas_dy_texel));\n"
-                + "        float pagesofatlas_lod = log2(max(pagesofatlas_rho, 1.0));\n"
                 + "        return textureLod(u_BlockTex3, uv, clamp(pagesofatlas_lod, 0.0, "
                 + maxMipLiteral
                 + "));\n"
                 + "    }\n"
-                + "    vec2 pagesofatlas_size = vec2(textureSize("
-                + diffuseSampler
-                + ", 0));\n"
-                + "    vec2 pagesofatlas_dx_texel = pagesofatlas_dx * pagesofatlas_size;\n"
-                + "    vec2 pagesofatlas_dy_texel = pagesofatlas_dy * pagesofatlas_size;\n"
-                + "    float pagesofatlas_rho = max(length(pagesofatlas_dx_texel), length(pagesofatlas_dy_texel));\n"
-                + "    float pagesofatlas_lod = log2(max(pagesofatlas_rho, 1.0));\n"
                 + "    return textureLod("
                 + diffuseSampler
                 + ", uv, clamp(pagesofatlas_lod, 0.0, "
@@ -674,6 +871,17 @@ public abstract class IrisTransformPatcherMixin {
 
             globals.append(
                 "flat in uint pagesofatlas_page;\n"
+            );
+        }
+
+        if (
+            PagesOfAtlasVirtualAtlas.enabled()
+            && !source.contains(
+                "flat in ivec2 pagesofatlas_atlasSize;"
+            )
+        ) {
+            globals.append(
+                "flat in ivec2 pagesofatlas_atlasSize;\n"
             );
         }
 

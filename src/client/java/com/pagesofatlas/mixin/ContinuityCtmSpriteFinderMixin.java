@@ -2,6 +2,7 @@ package com.pagesofatlas.mixin;
 
 import com.pagesofatlas.PagesOfAtlasQuadTag;
 import com.pagesofatlas.PagesOfAtlasRegistry;
+import com.pagesofatlas.PagesOfAtlasVirtualAtlas;
 
 import net.fabricmc.fabric.api.client.renderer.v1.mesh.QuadView;
 import net.fabricmc.fabric.api.client.renderer.v1.sprite.FabricTextureAtlas;
@@ -50,6 +51,10 @@ public abstract class ContinuityCtmSpriteFinderMixin {
         SpriteFinder originalFinder,
         QuadView quad
     ) {
+        if (PagesOfAtlasVirtualAtlas.enabled()) {
+            return originalFinder.find(quad);
+        }
+
         int tag = quad.tag();
 
         if (!PagesOfAtlasQuadTag.isPagesOfAtlasTag(tag)) {

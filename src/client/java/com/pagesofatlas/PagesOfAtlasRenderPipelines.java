@@ -56,6 +56,12 @@ public final class PagesOfAtlasRenderPipelines {
             "core/terrain_split"
         );
 
+    private static final Identifier VIRTUAL_TERRAIN_SHADER =
+        Identifier.fromNamespaceAndPath(
+            "pagesofatlas",
+            "core/terrain_virtual"
+        );
+
     private static final RenderPipeline.Snippet TERRAIN =
         RenderPipeline.builder(
             RenderPipelines.GLOBALS_SNIPPET
@@ -125,6 +131,89 @@ public final class PagesOfAtlasRenderPipelines {
                     Identifier.fromNamespaceAndPath(
                         "pagesofatlas",
                         "pipeline/translucent_terrain"
+                    )
+                )
+                .withColorTargetState(
+                    new ColorTargetState(
+                        BlendFunction.TRANSLUCENT
+                    )
+                )
+                .withShaderDefine(
+                    "ALPHA_CUTOUT",
+                    0.1F
+                )
+                .build()
+        );
+
+    private static final RenderPipeline.Snippet VIRTUAL_TERRAIN =
+        RenderPipeline.builder(
+            RenderPipelines.GLOBALS_SNIPPET
+        )
+            .withBindGroupLayout(
+                BindGroupLayouts.FOG
+            )
+            .withBindGroupLayout(
+                TERRAIN_SPLIT_SAMPLERS
+            )
+            .withVertexBinding(
+                0,
+                DefaultVertexFormat.BLOCK
+            )
+            .withPrimitiveTopology(
+                PrimitiveTopology.QUADS
+            )
+            .withDepthStencilState(
+                DepthStencilState.DEFAULT
+            )
+            .withBindGroupLayout(
+                BindGroupLayouts.PROJECTION
+            )
+            .withBindGroupLayout(
+                BindGroupLayouts.CHUNK_SECTION
+            )
+            .withVertexShader(
+                VIRTUAL_TERRAIN_SHADER
+            )
+            .withFragmentShader(
+                VIRTUAL_TERRAIN_SHADER
+            )
+            .buildSnippet();
+
+    public static final RenderPipeline VIRTUAL_SOLID =
+        RenderPipelines.register(
+            RenderPipeline.builder(VIRTUAL_TERRAIN)
+                .withLocation(
+                    Identifier.fromNamespaceAndPath(
+                        "pagesofatlas",
+                        "pipeline/virtual_solid_terrain"
+                    )
+                )
+                .build()
+        );
+
+    public static final RenderPipeline VIRTUAL_CUTOUT =
+        RenderPipelines.register(
+            RenderPipeline.builder(VIRTUAL_TERRAIN)
+                .withLocation(
+                    Identifier.fromNamespaceAndPath(
+                        "pagesofatlas",
+                        "pipeline/virtual_cutout_terrain"
+                    )
+                )
+                .withShaderDefine(
+                    "ALPHA_CUTOUT",
+                    0.5F
+                )
+                .build()
+        );
+
+    public static final RenderPipeline VIRTUAL_TRANSLUCENT =
+        RenderPipelines.register(
+            RenderPipeline.builder(VIRTUAL_TERRAIN)
+                .withLocation(
+                    Identifier.fromNamespaceAndPath(
+                        "pagesofatlas",
+                        "pipeline/virtual_translucent_terrain"
                     )
                 )
                 .withColorTargetState(

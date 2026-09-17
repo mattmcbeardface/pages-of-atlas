@@ -4,6 +4,10 @@ import com.pagesofatlas.PagesOfAtlasClient;
 import com.pagesofatlas.PagesOfAtlasDirectUploader;
 import com.pagesofatlas.PagesOfAtlasPhysicalAtlases;
 import com.pagesofatlas.PagesOfAtlasRegistry;
+import com.pagesofatlas.PagesOfAtlasVirtualAtlas;
+
+import net.fabricmc.fabric.api.client.renderer.v1.sprite.FabricPreparations;
+import net.fabricmc.fabric.api.client.renderer.v1.sprite.SpriteFinder;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.Sheets;
@@ -25,6 +29,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(TextureAtlas.class)
 public abstract class TextureAtlasMixin {
@@ -56,6 +61,110 @@ public abstract class TextureAtlasMixin {
     private static final ThreadLocal<Boolean>
         pagesofatlas$internalUpload =
             ThreadLocal.withInitial(() -> false);
+
+    @Unique
+    private Map<Identifier, TextureAtlasSprite>
+        pagesofatlas$sodiumPhysicalRegions;
+
+    @Unique
+    private TextureAtlasSprite
+        pagesofatlas$sodiumPhysicalMissing;
+
+    @Unique
+    private boolean pagesofatlas$sodiumFinderSwap;
+
+    /**
+     * Fabric/Continuity must search the combined logical UV space even though
+     * this TextureAtlas object's GPU allocation and lookup map are page zero.
+     */
+    @Inject(
+        method = "spriteFinder",
+        at = @At("HEAD"),
+        cancellable = true,
+        require = 0,
+        remap = false
+    )
+    private void pagesofatlas$logicalFabricSpriteFinder(
+        CallbackInfoReturnable<SpriteFinder> cir
+    ) {
+        if (
+            !PagesOfAtlasVirtualAtlas.enabledFor(location)
+            || PagesOfAtlasRegistry.plan(location).isEmpty()
+        ) {
+            return;
+        }
+
+        PagesOfAtlasRegistry.uploadBundle(location)
+            .ifPresent(bundle ->
+                cir.setReturnValue(
+                    ((FabricPreparations)bundle.combined())
+                        .spriteFinder()
+                )
+            );
+    }
+
+    /**
+     * Sodium constructs its finder directly from TextureAtlas fields. Swap in
+     * the logical sprite map only for that constructor call, then immediately
+     * restore the physical page-zero map used by Iris/PBR lifecycle code.
+     */
+    @Inject(
+        method = "sodium$getSpriteFinder",
+        at = @At("HEAD"),
+        require = 0,
+        remap = false
+    )
+    private void pagesofatlas$beginLogicalSodiumSpriteFinder(
+        CallbackInfoReturnable<Object> cir
+    ) {
+        if (
+            !PagesOfAtlasVirtualAtlas.enabledFor(location)
+            || PagesOfAtlasRegistry.plan(location).isEmpty()
+        ) {
+            return;
+        }
+
+        PagesOfAtlasRegistry.uploadBundle(location)
+            .ifPresent(bundle -> {
+                pagesofatlas$sodiumPhysicalRegions =
+                    texturesByName;
+
+                pagesofatlas$sodiumPhysicalMissing =
+                    missingSprite;
+
+                texturesByName =
+                    bundle.combined().regions();
+
+                missingSprite =
+                    bundle.combined().missing();
+
+                pagesofatlas$sodiumFinderSwap = true;
+            });
+    }
+
+    @Inject(
+        method = "sodium$getSpriteFinder",
+        at = @At("RETURN"),
+        require = 0,
+        remap = false
+    )
+    private void pagesofatlas$endLogicalSodiumSpriteFinder(
+        CallbackInfoReturnable<Object> cir
+    ) {
+        if (!pagesofatlas$sodiumFinderSwap) {
+            return;
+        }
+
+        texturesByName =
+            pagesofatlas$sodiumPhysicalRegions;
+
+        missingSprite =
+            pagesofatlas$sodiumPhysicalMissing;
+
+        pagesofatlas$sodiumPhysicalRegions = null;
+        pagesofatlas$sodiumPhysicalMissing = null;
+        pagesofatlas$sodiumFinderSwap = false;
+    }
 
     /*
      * EXPERIMENT:

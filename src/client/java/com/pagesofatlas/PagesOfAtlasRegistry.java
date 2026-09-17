@@ -262,6 +262,17 @@ public final class PagesOfAtlasRegistry {
             : Optional.of(active.plan());
     }
 
+    static AtlasPlan activePlan(
+        Identifier logicalAtlas
+    ) {
+        ActiveAtlas active =
+            ACTIVE_ATLASES.get(logicalAtlas);
+
+        return active == null
+            ? null
+            : active.plan();
+    }
+
     public static Optional<Placement> lookup(
         Identifier atlas,
         Identifier sprite
@@ -374,6 +385,78 @@ public final class PagesOfAtlasRegistry {
         );
 
         return List.copyOf(result);
+    }
+
+    public static Optional<Identifier> spriteAtPhysicalPixel(
+        Identifier atlas,
+        int page,
+        double x,
+        double y,
+        double tolerance
+    ) {
+        ActiveAtlas active =
+            ACTIVE_ATLASES.get(atlas);
+
+        if (active == null) {
+            return Optional.empty();
+        }
+
+        for (
+            Map.Entry<SpriteKey, Placement> entry :
+            active.placements().entrySet()
+        ) {
+            SpriteKey key = entry.getKey();
+            Placement placement = entry.getValue();
+
+            if (
+                !key.atlas().equals(atlas)
+                || placement.page() != page
+            ) {
+                continue;
+            }
+
+            SpriteDimensions dimensions =
+                active.dimensions().get(key);
+
+            if (dimensions == null) {
+                continue;
+            }
+
+            double left =
+                placement.x()
+                    + placement.padding()
+                    - tolerance;
+
+            double top =
+                placement.y()
+                    + placement.padding()
+                    - tolerance;
+
+            double right =
+                placement.x()
+                    + placement.padding()
+                    + dimensions.width()
+                    + tolerance;
+
+            double bottom =
+                placement.y()
+                    + placement.padding()
+                    + dimensions.height()
+                    + tolerance;
+
+            if (
+                x >= left
+                && x <= right
+                && y >= top
+                && y <= bottom
+            ) {
+                return Optional.of(
+                    key.sprite()
+                );
+            }
+        }
+
+        return Optional.empty();
     }
 
     public static void stageVanillaUpload(

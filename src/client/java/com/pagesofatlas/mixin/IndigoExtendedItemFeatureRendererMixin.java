@@ -7,6 +7,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 
 import com.pagesofatlas.PagesOfAtlasItemRendering;
 import com.pagesofatlas.PagesOfAtlasQuadTag;
+import com.pagesofatlas.PagesOfAtlasVirtualAtlas;
 
 import net.fabricmc.fabric.impl.client.indigo.renderer.mesh.MutableQuadViewImpl;
 
@@ -19,9 +20,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 
 /**
- * Indigo's extended item path retains PoA's page in its quad tag. Select the
- * matching page-bound RenderType, then undo Indigo's terrain-compatible UV
- * page stride only while this item quad is buffered.
+ * In virtual mode, Indigo keeps logical UVs through all model transforms.
+ * Select the physical page from those final UVs and localize them only while
+ * this item quad is buffered. The tag/stride path remains for legacy mode.
  */
 @Mixin(
     targets =
@@ -30,6 +31,17 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
     remap = false
 )
 public abstract class IndigoExtendedItemFeatureRendererMixin {
+
+    @Unique
+    private int pagesofatlas$currentItemPage;
+
+    @Unique
+    private boolean pagesofatlas$virtualItemRoute;
+
+    @Unique
+    private final PagesOfAtlasItemRendering.VirtualPageLocalConsumer
+        pagesofatlas$virtualUvConsumer =
+            new PagesOfAtlasItemRendering.VirtualPageLocalConsumer();
 
     @ModifyExpressionValue(
         method = "bufferMain",
@@ -46,10 +58,25 @@ public abstract class IndigoExtendedItemFeatureRendererMixin {
         RenderType original,
         @Local(argsOnly = true) MutableQuadViewImpl quad
     ) {
-        return PagesOfAtlasItemRendering.pageAware(
-            original,
-            pagesofatlas$page(quad)
-        );
+        int page =
+            PagesOfAtlasVirtualAtlas.enabled()
+                ? PagesOfAtlasItemRendering.virtualPage(
+                    quad
+                )
+                : pagesofatlas$page(quad);
+
+        RenderType selected =
+            PagesOfAtlasItemRendering.pageAware(
+                original,
+                page
+            );
+
+        pagesofatlas$currentItemPage = page;
+        pagesofatlas$virtualItemRoute =
+            PagesOfAtlasVirtualAtlas.enabled()
+                && selected != original;
+
+        return selected;
     }
 
     @ModifyArg(
@@ -69,6 +96,13 @@ public abstract class IndigoExtendedItemFeatureRendererMixin {
         VertexConsumer original,
         @Local(argsOnly = true) MutableQuadViewImpl quad
     ) {
+        if (pagesofatlas$virtualItemRoute) {
+            return pagesofatlas$virtualUvConsumer.wrap(
+                original,
+                pagesofatlas$currentItemPage
+            );
+        }
+
         return PagesOfAtlasItemRendering.pageLocal(
             original,
             pagesofatlas$page(quad)

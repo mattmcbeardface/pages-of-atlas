@@ -1,6 +1,7 @@
 package com.pagesofatlas.mixin;
 
 import com.pagesofatlas.PagesOfAtlasQuadTag;
+import com.pagesofatlas.PagesOfAtlasVirtualAtlas;
 
 import net.fabricmc.fabric.api.client.renderer.v1.mesh.MutableQuadView;
 import net.fabricmc.fabric.api.client.renderer.v1.mesh.QuadEmitter;
@@ -46,6 +47,14 @@ public abstract class SodiumMutableQuadViewWrapperMixin {
 
         TextureAtlasSprite sprite =
             bakedQuad.materialInfo().sprite();
+
+        if (
+            PagesOfAtlasVirtualAtlas.enabledFor(
+                sprite.atlasLocation()
+            )
+        ) {
+            return;
+        }
 
         quad.tag(
             PagesOfAtlasQuadTag.encodeSprite(

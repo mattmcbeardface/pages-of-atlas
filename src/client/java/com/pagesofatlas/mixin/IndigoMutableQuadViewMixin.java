@@ -1,6 +1,8 @@
 package com.pagesofatlas.mixin;
 
 import com.pagesofatlas.PagesOfAtlasQuadTag;
+import com.pagesofatlas.PagesOfAtlasVirtualAtlas;
+import com.pagesofatlas.VirtualAtlasDiagnostics;
 
 import net.minecraft.client.resources.model.geometry.BakedQuad;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
@@ -54,6 +56,14 @@ public abstract class IndigoMutableQuadViewMixin {
         TextureAtlasSprite sprite =
             bakedQuad.materialInfo().sprite();
 
+        if (
+            PagesOfAtlasVirtualAtlas.enabledFor(
+                sprite.atlasLocation()
+            )
+        ) {
+            return;
+        }
+
         quad.tag(
             PagesOfAtlasQuadTag.encodeSprite(
                 sprite
@@ -83,6 +93,16 @@ public abstract class IndigoMutableQuadViewMixin {
     ) {
         MutableQuadView quad =
             (MutableQuadView)(Object)this;
+
+        if (
+            PagesOfAtlasVirtualAtlas.enabled()
+            && VirtualAtlasDiagnostics.enabled()
+        ) {
+            VirtualAtlasDiagnostics.inspect(
+                "Indigo final terrain emission",
+                quad
+            );
+        }
 
         int tag =
             quad.tag();

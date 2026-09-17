@@ -2,9 +2,11 @@ package com.pagesofatlas.mixin;
 
 import com.pagesofatlas.PagedTextureAtlasSprite;
 import com.pagesofatlas.NonOwningPagedTextureAtlasSprite;
+import com.pagesofatlas.LogicalVirtualAtlasSprite;
 import com.pagesofatlas.PagesOfAtlasClient;
 import com.pagesofatlas.PagesOfAtlasPager;
 import com.pagesofatlas.PagesOfAtlasRegistry;
+import com.pagesofatlas.PagesOfAtlasVirtualAtlas;
 
 import java.util.HashMap;
 import java.util.List;
@@ -39,6 +41,22 @@ public abstract class SpriteLoaderMixin {
     @Unique
     private static final Identifier pagesofatlas$PAINTING_BACK =
         Identifier.withDefaultNamespace("back");
+
+    @Unique
+    private static final List<Identifier>
+        pagesofatlas$VIRTUAL_PAGE_ANCHORS =
+            List.of(
+                Identifier.withDefaultNamespace("block/cobblestone"),
+                Identifier.withDefaultNamespace(
+                    "continuity_reserved/ctm/patrix/cobblestone/default/1"
+                ),
+                Identifier.withDefaultNamespace(
+                    "continuity_reserved/ctm/patrix/cobblestone/default/2"
+                ),
+                Identifier.withDefaultNamespace(
+                    "continuity_reserved/ctm/patrix/cobblestone/default/3"
+                )
+            );
 
     @Shadow
     @Final
@@ -174,8 +192,31 @@ public abstract class SpriteLoaderMixin {
         PagesOfAtlasPager.Result<SpriteContents>
             result;
 
+        boolean virtualAtlasProof =
+            PagesOfAtlasVirtualAtlas.enabledFor(
+                location
+            );
+
         try {
-            if (paintingBack != null) {
+            if (virtualAtlasProof) {
+                if (
+                    maxSupportedTextureSize
+                        < PagesOfAtlasVirtualAtlas.CELL_SIZE
+                ) {
+                    throw new IllegalStateException(
+                        "The virtual-atlas proof requires 16384x16384 texture support; reported maximum is "
+                            + maxSupportedTextureSize
+                    );
+                }
+
+                result =
+                    PagesOfAtlasPager.packVirtualAtlasProof(
+                        sprites,
+                        mipLevel,
+                        padding,
+                        pagesofatlas$VIRTUAL_PAGE_ANCHORS
+                    );
+            } else if (paintingBack != null) {
                 result =
                     PagesOfAtlasPager.packWithReplicatedEntry(
                         sprites,
@@ -323,6 +364,26 @@ public abstract class SpriteLoaderMixin {
                         );
                 }
 
+                TextureAtlasSprite logicalSprite =
+                    sprite;
+
+                if (virtualAtlasProof) {
+                    logicalSprite =
+                        new LogicalVirtualAtlasSprite(
+                            location,
+                            contents,
+                            PagesOfAtlasVirtualAtlas.virtualX(
+                                page.number(),
+                                placement.x()
+                            ),
+                            PagesOfAtlasVirtualAtlas.virtualY(
+                                page.number(),
+                                placement.y()
+                            ),
+                            placement.padding()
+                        );
+                }
+
                 if (firstAnySprite == null) {
                     firstAnySprite =
                         sprite;
@@ -343,12 +404,12 @@ public abstract class SpriteLoaderMixin {
                      */
                     combinedRegions.putIfAbsent(
                         contents.name(),
-                        sprite
+                        logicalSprite
                     );
                 } else {
                     combinedRegions.put(
                         contents.name(),
-                        sprite
+                        logicalSprite
                     );
                 }
 
@@ -367,7 +428,7 @@ public abstract class SpriteLoaderMixin {
                         sprite;
 
                     logicalMissing =
-                        sprite;
+                        logicalSprite;
                 }
             }
 
@@ -477,12 +538,16 @@ public abstract class SpriteLoaderMixin {
          */
         SpriteLoader.Preparations combined =
             new SpriteLoader.Preparations(
-                result.pages()
-                    .getFirst()
-                    .width(),
-                result.pages()
-                    .getFirst()
-                    .height(),
+                virtualAtlasProof
+                    ? PagesOfAtlasVirtualAtlas.VIRTUAL_SIZE
+                    : result.pages()
+                        .getFirst()
+                        .width(),
+                virtualAtlasProof
+                    ? PagesOfAtlasVirtualAtlas.VIRTUAL_SIZE
+                    : result.pages()
+                        .getFirst()
+                        .height(),
                 mipLevel,
                 logicalMissing,
                 Map.copyOf(
@@ -527,6 +592,33 @@ public abstract class SpriteLoaderMixin {
                 PagesOfAtlasRegistry.currentGeneration()
             )
         );
+
+        if (virtualAtlasProof) {
+            PagesOfAtlasClient.LOGGER.warn(
+                "[VIRTUAL ATLAS POC] Exposed {} as one logical {}x{} atlas; the combined preparation is intercepted and never allocated on the GPU",
+                location,
+                PagesOfAtlasVirtualAtlas.VIRTUAL_SIZE,
+                PagesOfAtlasVirtualAtlas.VIRTUAL_SIZE
+            );
+
+            for (
+                int page = 0;
+                page < pagesofatlas$VIRTUAL_PAGE_ANCHORS.size();
+                page++
+            ) {
+                PagesOfAtlasClient.LOGGER.warn(
+                    "[VIRTUAL ATLAS POC] Deliberate page {} anchor: {} (cell {},{})",
+                    page,
+                    result.pages()
+                        .get(page)
+                        .placements()
+                        .getFirst()
+                        .name(),
+                    PagesOfAtlasVirtualAtlas.cellX(page),
+                    PagesOfAtlasVirtualAtlas.cellY(page)
+                );
+            }
+        }
 
         cir.setReturnValue(
             combined

@@ -2,6 +2,7 @@ package com.pagesofatlas.mixin;
 
 import com.pagesofatlas.PagesOfAtlasClient;
 import com.pagesofatlas.PagesOfAtlasRegistry;
+import com.pagesofatlas.PagesOfAtlasVirtualAtlas;
 import com.pagesofatlas.api.PagedSprite;
 
 import net.minecraft.client.renderer.texture.SpriteContents;
@@ -62,6 +63,19 @@ public abstract class TextureAtlasSpriteMixin
         int padding,
         CallbackInfo ci
     ) {
+        if (
+            PagesOfAtlasVirtualAtlas.enabledFor(
+                atlasLocation
+            )
+        ) {
+            /*
+             * Logical virtual sprites must remain ordinary upstream
+             * sprites. Physical upload sprites set their private page
+             * explicitly in PagedTextureAtlasSprite after super().
+             */
+            return;
+        }
+
         PagesOfAtlasRegistry.lookup(
             atlasLocation,
             contents.name()

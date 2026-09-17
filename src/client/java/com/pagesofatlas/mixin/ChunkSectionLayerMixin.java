@@ -4,6 +4,7 @@ import com.mojang.blaze3d.pipeline.RenderPipeline;
 
 import com.pagesofatlas.PagesOfAtlasRegistry;
 import com.pagesofatlas.PagesOfAtlasRenderPipelines;
+import com.pagesofatlas.PagesOfAtlasVirtualAtlas;
 
 import net.minecraft.client.renderer.chunk.ChunkSectionLayer;
 import net.minecraft.client.renderer.texture.TextureAtlas;
@@ -39,20 +40,29 @@ public abstract class ChunkSectionLayerMixin {
         ChunkSectionLayer self =
             (ChunkSectionLayer)(Object)this;
 
+        boolean virtual =
+            PagesOfAtlasVirtualAtlas.enabled();
+
         switch (self) {
             case SOLID ->
                 cir.setReturnValue(
-                    PagesOfAtlasRenderPipelines.SOLID
+                    virtual
+                        ? PagesOfAtlasRenderPipelines.VIRTUAL_SOLID
+                        : PagesOfAtlasRenderPipelines.SOLID
                 );
 
             case CUTOUT ->
                 cir.setReturnValue(
-                    PagesOfAtlasRenderPipelines.CUTOUT
+                    virtual
+                        ? PagesOfAtlasRenderPipelines.VIRTUAL_CUTOUT
+                        : PagesOfAtlasRenderPipelines.CUTOUT
                 );
 
             case TRANSLUCENT ->
                 cir.setReturnValue(
-                    PagesOfAtlasRenderPipelines.TRANSLUCENT
+                    virtual
+                        ? PagesOfAtlasRenderPipelines.VIRTUAL_TRANSLUCENT
+                        : PagesOfAtlasRenderPipelines.TRANSLUCENT
                 );
         }
     }

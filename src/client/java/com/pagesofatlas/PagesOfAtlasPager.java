@@ -29,6 +29,281 @@ public final class PagesOfAtlasPager {
     }
 
     /**
+     * Deliberately produces the proof-of-concept four-page block layout.
+     * One named, recognizable sprite is seeded onto each page, then all
+     * remaining entries use the existing first-fit page packer.
+     */
+    public static <T extends Stitcher.Entry> Result<T>
+        packVirtualAtlasProof(
+            List<T> input,
+            int mipLevel,
+            int padding,
+            List<Identifier> pageAnchors
+        ) {
+        if (pageAnchors.size()
+            != PagesOfAtlasVirtualAtlas.PAGE_COUNT) {
+
+            throw new IllegalArgumentException(
+                "The virtual-atlas proof requires exactly four page anchors"
+            );
+        }
+
+        Result<T> baseline =
+            pack(
+                input,
+                PagesOfAtlasVirtualAtlas.CELL_SIZE,
+                PagesOfAtlasVirtualAtlas.CELL_SIZE,
+                mipLevel,
+                padding,
+                null
+            );
+
+        if (
+            baseline.pages().size()
+                > PagesOfAtlasVirtualAtlas.PAGE_COUNT
+        ) {
+            throw new IllegalStateException(
+                "The 32K virtual-atlas proof supports exactly four cells, but baseline packing needs "
+                    + baseline.pages().size()
+                    + " pages"
+            );
+        }
+
+        List<Holder<T>> holders =
+            new ArrayList<>();
+
+        for (T entry : input) {
+            Holder<T> holder =
+                createHolder(
+                    entry,
+                    mipLevel,
+                    padding
+                );
+
+            holders.add(holder);
+        }
+
+        holders.sort(
+            Comparator
+                .<Holder<T>>comparingInt(h -> -h.height)
+                .thenComparingInt(h -> -h.width)
+                .thenComparing(h -> h.entry.name())
+        );
+
+        List<Page<T>> pages =
+            new ArrayList<>(baseline.pages());
+
+        while (
+            pages.size()
+                < PagesOfAtlasVirtualAtlas.PAGE_COUNT
+        ) {
+            pages.add(
+                new Page<>(
+                    pages.size(),
+                    PagesOfAtlasVirtualAtlas.CELL_SIZE,
+                    PagesOfAtlasVirtualAtlas.CELL_SIZE
+                )
+            );
+        }
+
+        java.util.Set<Holder<T>> anchors =
+            java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<>()
+            );
+
+        for (
+            int page = 0;
+            page < pageAnchors.size();
+            page++
+        ) {
+            Identifier anchor =
+                pageAnchors.get(page);
+
+            Holder<T> holder =
+                findVirtualProofAnchor(
+                    holders,
+                    pages.get(page),
+                    anchor,
+                    page,
+                    anchors
+                );
+
+            Page<T> source =
+                pages.stream()
+                    .filter(candidate ->
+                        candidate.contains(
+                            holder.entry
+                        )
+                    )
+                    .findFirst()
+                    .orElseThrow();
+
+            Page<T> target =
+                pages.get(page);
+
+            if (
+                source != target
+                && (
+                    !source.remove(holder.entry)
+                    || !target.add(holder, padding)
+                )
+            ) {
+                throw new IllegalStateException(
+                    "Virtual-atlas proof cannot relocate anchor to page "
+                        + page
+                        + ": "
+                        + holder.entry.name()
+                );
+            }
+
+            target.promote(holder.entry);
+            anchors.add(holder);
+        }
+
+        /*
+         * TextureAtlas reserves one entry as the physical missing-sprite
+         * alias. Give every page a second real entry so its sprite metadata
+         * buffer is never empty after that alias is removed from its original
+         * key.
+         */
+        for (
+            int page = 0;
+            page < pages.size();
+            page++
+        ) {
+            Page<T> target = pages.get(page);
+
+            while (target.placementCount() < 2) {
+                boolean moved = false;
+
+                for (
+                    int candidateIndex = holders.size() - 1;
+                    candidateIndex >= 0;
+                    candidateIndex--
+                ) {
+                    Holder<T> candidate =
+                        holders.get(candidateIndex);
+
+                    if (anchors.contains(candidate)) {
+                        continue;
+                    }
+
+                    Page<T> source =
+                        pages.stream()
+                            .filter(other ->
+                                other != target
+                                    && other.placementCount() > 2
+                                    && other.contains(
+                                        candidate.entry
+                                    )
+                            )
+                            .findFirst()
+                            .orElse(null);
+
+                    if (
+                        source != null
+                        && target.add(candidate, padding)
+                        && source.remove(candidate.entry)
+                    ) {
+                        moved = true;
+                        break;
+                    }
+                }
+
+                if (!moved) {
+                    throw new IllegalStateException(
+                        "Virtual-atlas proof cannot place a second sprite on page "
+                            + page
+                    );
+                }
+            }
+        }
+
+        return new Result<>(
+            List.copyOf(pages)
+        );
+    }
+
+    private static <T extends Stitcher.Entry> Holder<T>
+        findVirtualProofAnchor(
+            List<Holder<T>> holders,
+            Page<T> target,
+            Identifier preferred,
+            int page,
+            java.util.Set<Holder<T>> used
+        ) {
+        String unwrapped =
+            preferred.getPath().replace(
+                "continuity_reserved/",
+                ""
+            );
+
+        java.util.function.Predicate<Holder<T>> available =
+            candidate -> !used.contains(candidate);
+
+        return holders.stream()
+            .filter(available)
+            .filter(candidate ->
+                candidate.entry.name().equals(preferred)
+            )
+            .findFirst()
+            .or(() ->
+                holders.stream()
+                    .filter(available)
+                    .filter(candidate ->
+                        candidate.entry.name()
+                            .getPath()
+                            .endsWith(unwrapped)
+                    )
+                    .findFirst()
+            )
+            .or(() ->
+                page <= 0
+                    ? java.util.Optional.empty()
+                    : holders.stream()
+                        .filter(available)
+                        .filter(candidate ->
+                            target.contains(candidate.entry)
+                                && candidate.entry.name()
+                                    .getPath()
+                                    .contains("cobblestone")
+                        )
+                        .findFirst()
+            )
+            .or(() ->
+                page <= 0
+                    ? java.util.Optional.empty()
+                    : holders.stream()
+                        .filter(available)
+                        .filter(candidate ->
+                            candidate.entry.name()
+                                .getPath()
+                                .contains("cobblestone")
+                        )
+                        .findFirst()
+            )
+            .or(() ->
+                holders.stream()
+                    .filter(available)
+                    .filter(candidate ->
+                        target.contains(candidate.entry)
+                    )
+                    .findFirst()
+            )
+            .or(() ->
+                holders.stream()
+                    .filter(available)
+                    .findFirst()
+            )
+            .orElseThrow(() ->
+                new IllegalStateException(
+                    "Virtual-atlas proof anchor is missing: "
+                        + preferred
+                )
+            );
+    }
+
+    /**
      * Packs an atlas while reserving one copy of {@code replicatedEntry}
      * on every physical page.
      *
@@ -359,6 +634,42 @@ public final class PagesOfAtlasPager {
 
         public List<Placement<T>> placements() {
             return List.copyOf(placements);
+        }
+
+        boolean contains(T entry) {
+            return placements.stream()
+                .anyMatch(
+                    placement ->
+                        placement.entry() == entry
+                );
+        }
+
+        boolean remove(T entry) {
+            return placements.removeIf(
+                placement ->
+                    placement.entry() == entry
+            );
+        }
+
+        void promote(T entry) {
+            for (
+                int index = 0;
+                index < placements.size();
+                index++
+            ) {
+                Placement<T> placement =
+                    placements.get(index);
+
+                if (placement.entry() == entry) {
+                    placements.remove(index);
+                    placements.addFirst(placement);
+                    return;
+                }
+            }
+        }
+
+        int placementCount() {
+            return placements.size();
         }
     }
 

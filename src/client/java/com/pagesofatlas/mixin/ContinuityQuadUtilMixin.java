@@ -1,6 +1,7 @@
 package com.pagesofatlas.mixin;
 
 import com.pagesofatlas.PagesOfAtlasQuadTag;
+import com.pagesofatlas.PagesOfAtlasVirtualAtlas;
 
 
 import net.fabricmc.fabric.api.client.renderer.v1.mesh.MutableQuadView;
@@ -43,6 +44,14 @@ public abstract class ContinuityQuadUtilMixin {
         TextureAtlasSprite newSprite,
         CallbackInfo ci
     ) {
+        if (
+            PagesOfAtlasVirtualAtlas.enabledFor(
+                newSprite.atlasLocation()
+            )
+        ) {
+            return;
+        }
+
         int newTag =
             PagesOfAtlasQuadTag.encodeSprite(
                 newSprite

@@ -5,6 +5,8 @@ import com.mojang.blaze3d.pipeline.RenderPipeline;
 
 import net.minecraft.resources.Identifier;
 
+import com.pagesofatlas.PagesOfAtlasVirtualAtlas;
+
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
@@ -96,7 +98,9 @@ public abstract class SodiumShaderChunkRendererMixin {
     ) {
         return Identifier.fromNamespaceAndPath(
             "pagesofatlas",
-            "blocks/block_layer_opaque"
+            PagesOfAtlasVirtualAtlas.enabled()
+                ? "blocks/block_layer_virtual"
+                : "blocks/block_layer_opaque"
         );
     }
 
@@ -115,7 +119,9 @@ public abstract class SodiumShaderChunkRendererMixin {
     ) {
         return Identifier.fromNamespaceAndPath(
             "pagesofatlas",
-            "blocks/block_layer_opaque"
+            PagesOfAtlasVirtualAtlas.enabled()
+                ? "blocks/block_layer_virtual"
+                : "blocks/block_layer_opaque"
         );
     }
 }
