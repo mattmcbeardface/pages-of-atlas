@@ -1,47 +1,51 @@
 package com.pagesofatlas;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.resources.Identifier;
 
 /**
- * Constants and the opt-in switch for the 32K virtual-atlas proof.
+ * Production state and constants for the 32K virtual block atlas.
  *
- * <p>The legacy Pages of Atlas path remains the default. Enable the proof with
- * {@code -Dpagesofatlas.virtualAtlasPoc=true}.</p>
+ * <p>The block atlas uses this architecture only when ordinary packing shows
+ * that it needs more than one physical texture.</p>
  */
 public final class PagesOfAtlasVirtualAtlas {
 
     private PagesOfAtlasVirtualAtlas() {}
 
-    public static final String PROPERTY =
-        "pagesofatlas.virtualAtlasPoc";
-
-    public static final Path ENABLE_MARKER =
-        Path.of(
-            "mods",
-            "pagesofatlas-virtual-atlas-poc.enable"
-        );
-
     public static final int CELL_SIZE = 16_384;
     public static final int VIRTUAL_SIZE = 32_768;
     public static final int PAGE_COUNT = 4;
 
-    private static final boolean ENABLED =
-        Boolean.getBoolean(PROPERTY)
-            || Files.isRegularFile(ENABLE_MARKER);
+    public static boolean selectForCurrentStitch(
+        Identifier atlas,
+        boolean pagingRequired
+    ) {
+        boolean virtual =
+            TextureAtlas.LOCATION_BLOCKS.equals(atlas)
+                && pagingRequired;
 
-    public static boolean enabled() {
-        return ENABLED;
+        if (TextureAtlas.LOCATION_BLOCKS.equals(atlas)) {
+            PagesOfAtlasRegistry.selectCurrentVirtualMode(
+                atlas,
+                virtual
+            );
+        }
+
+        return virtual;
     }
 
-    public static boolean enabledFor(
+    public static boolean active() {
+        return activeFor(
+            TextureAtlas.LOCATION_BLOCKS
+        );
+    }
+
+    public static boolean activeFor(
         Identifier atlas
     ) {
-        return ENABLED
-            && TextureAtlas.LOCATION_BLOCKS.equals(atlas);
+        return TextureAtlas.LOCATION_BLOCKS.equals(atlas)
+            && PagesOfAtlasRegistry.virtualMode(atlas);
     }
 
     public static int cellX(int page) {

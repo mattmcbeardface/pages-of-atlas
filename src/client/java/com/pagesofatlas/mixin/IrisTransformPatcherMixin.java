@@ -123,7 +123,7 @@ public abstract class IrisTransformPatcherMixin {
             new HashMap<>();
 
         boolean virtualAtlas =
-            PagesOfAtlasVirtualAtlas.enabled();
+            PagesOfAtlasVirtualAtlas.active();
 
         String virtualDiffuseSampler = null;
 
@@ -212,7 +212,7 @@ public abstract class IrisTransformPatcherMixin {
     ) {
         if (diffuseSampler == null) {
             PagesOfAtlasClient.LOGGER.error(
-                "[VIRTUAL ATLAS POC] Iris terrain vertex could not identify the matching diffuse sampler"
+                "[VIRTUAL ATLAS] Iris terrain vertex could not identify the matching diffuse sampler"
             );
 
             return pagesofatlas$patchVertex(source);
@@ -234,7 +234,7 @@ public abstract class IrisTransformPatcherMixin {
             || !source.contains("_vert_init();")
         ) {
             PagesOfAtlasClient.LOGGER.error(
-                "[VIRTUAL ATLAS POC] Iris terrain vertex entry point or initialization anchor was not found; leaving shader unchanged"
+                "[VIRTUAL ATLAS] Iris terrain vertex entry point or initialization anchor was not found; leaving shader unchanged"
             );
 
             return source;
@@ -266,11 +266,22 @@ public abstract class IrisTransformPatcherMixin {
                 ? ""
                 : "uniform sampler2D u_BlockTex3;\n");
 
+        boolean hasIrisMidTex =
+            source.contains("iris_MidTex");
+
         String earlyGlobals =
             "flat out uint pagesofatlas_page;\n"
             + "flat out ivec2 pagesofatlas_atlasSize;\n"
-            + "vec2 pagesofatlas_local_uv;\n"
-            + "vec2 pagesofatlas_local_mid_uv;\n";
+            + "vec2 pagesofatlas_local_uv = vec2(0.0);\n"
+            + "vec2 pagesofatlas_local_mid_uv = vec2(0.0);\n"
+            /*
+             * Iris 1.11.4's depth transform renames the shader-pack
+             * main() to iris_depthMain() and appends a wrapper main().
+             * The helper bodies below are anchored before that wrapper,
+             * so calls injected into iris_depthMain() can precede them.
+             */
+            + "ivec2 pagesofatlas_physical_size(uint page);\n"
+            + "vec2 pagesofatlas_to_local(vec2 virtualUv, uint page, ivec2 physicalSize);\n";
 
         String helpers =
             pageSamplerDeclarations
@@ -306,17 +317,45 @@ public abstract class IrisTransformPatcherMixin {
                 "pagesofatlas_local_uv"
             );
 
-        source =
-            source.replace(
-                "iris_MidTex.t",
-                "pagesofatlas_local_mid_uv.t"
-            );
+        if (hasIrisMidTex) {
+            source =
+                source.replace(
+                    "iris_MidTex.t",
+                    "pagesofatlas_local_mid_uv.t"
+                );
 
-        source =
-            source.replace(
-                "(mat4(1.0f) * iris_MidTex)",
-                "vec4(pagesofatlas_local_mid_uv, 0.0f, 1.0f)"
-            );
+            source =
+                source.replace(
+                    "(mat4(1.0f) * iris_MidTex)",
+                    "vec4(pagesofatlas_local_mid_uv, 0.0f, 1.0f)"
+                );
+
+            /*
+             * The terrain UV has been remapped from the logical
+             * 32K atlas into physical-page-local coordinates.
+             *
+             * Shader-pack calculations in main() which compare that
+             * UV with Iris' transformed mc_midTexCoord must therefore
+             * use the midpoint in the same coordinate space.
+             *
+             * Preserve the original iris_MidTex declaration above
+             * main(): POA still needs it to derive local_mid_uv.
+             */
+            Matcher transformedMainEntry =
+                MAIN_ENTRY_PATTERN.matcher(source);
+
+            if (transformedMainEntry.find()) {
+                int transformedMain =
+                    transformedMainEntry.start();
+
+                source =
+                    source.substring(0, transformedMain)
+                    + source.substring(transformedMain).replaceAll(
+                        "\\biris_MidTex\\b",
+                        "pagesofatlas_local_mid_uv"
+                    );
+            }
+        }
 
         String initialization =
             "_vert_init();\n"
@@ -326,8 +365,12 @@ public abstract class IrisTransformPatcherMixin {
             + "    uvec2 pagesofatlas_cell = uvec2(floor(pagesofatlas_virtual_uv * 2.0));\n"
             + "    pagesofatlas_page = pagesofatlas_cell.y * 2u + pagesofatlas_cell.x;\n"
             + "    pagesofatlas_atlasSize = pagesofatlas_physical_size(pagesofatlas_page);\n"
-            + "    pagesofatlas_local_uv = pagesofatlas_to_local(pagesofatlas_virtual_uv, pagesofatlas_page, pagesofatlas_atlasSize);\n"
-            + "    pagesofatlas_local_mid_uv = pagesofatlas_to_local(iris_MidTex.st, pagesofatlas_page, pagesofatlas_atlasSize);";
+            + "    pagesofatlas_local_uv = pagesofatlas_to_local(pagesofatlas_virtual_uv, pagesofatlas_page, pagesofatlas_atlasSize);";
+
+        if (hasIrisMidTex) {
+            initialization +=
+                "\n    pagesofatlas_local_mid_uv = pagesofatlas_to_local(iris_MidTex.st, pagesofatlas_page, pagesofatlas_atlasSize);";
+        }
 
         source =
             source.replace(
@@ -336,7 +379,7 @@ public abstract class IrisTransformPatcherMixin {
             );
 
         PagesOfAtlasClient.LOGGER.debug(
-            "[VIRTUAL ATLAS POC] Iris vertex derives page/local UV from the final 32K normalized UV using {}",
+            "[VIRTUAL ATLAS] Iris vertex derives page/local UV from the final 32K normalized UV using {}",
             diffuseSampler
         );
 
@@ -596,7 +639,7 @@ public abstract class IrisTransformPatcherMixin {
         }
 
         if (
-            PagesOfAtlasVirtualAtlas.enabled()
+            PagesOfAtlasVirtualAtlas.active()
             && !source.contains(
                 "flat in ivec2 pagesofatlas_atlasSize;"
             )
@@ -875,7 +918,7 @@ public abstract class IrisTransformPatcherMixin {
         }
 
         if (
-            PagesOfAtlasVirtualAtlas.enabled()
+            PagesOfAtlasVirtualAtlas.active()
             && !source.contains(
                 "flat in ivec2 pagesofatlas_atlasSize;"
             )

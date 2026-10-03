@@ -34,6 +34,9 @@ public final class PagesOfAtlasRegistry {
     private static final Map<Identifier, ActiveAtlas> ACTIVE_ATLASES =
         new ConcurrentHashMap<>();
 
+    private static final Map<Identifier, VirtualMode> STAGED_VIRTUAL_MODES =
+        new ConcurrentHashMap<>();
+
     private static final Map<SpriteKey, Placement> PLACEMENTS =
         new ConcurrentHashMap<>();
 
@@ -89,10 +92,76 @@ public final class PagesOfAtlasRegistry {
         return generation;
     }
 
+    public static void selectCurrentVirtualMode(
+        Identifier atlas,
+        boolean virtual
+    ) {
+        Identifier currentAtlas =
+            CURRENT_ATLAS.get();
+
+        Long generation =
+            CURRENT_GENERATION.get();
+
+        if (
+            generation == null
+            || !atlas.equals(currentAtlas)
+        ) {
+            throw new IllegalStateException(
+                "Virtual-atlas mode selected outside its atlas stitch"
+            );
+        }
+
+        long selectedGeneration =
+            generation;
+
+        synchronized (PagesOfAtlasRegistry.class) {
+            if (
+                GENERATIONS.getOrDefault(
+                    atlas,
+                    -1L
+                ) != selectedGeneration
+            ) {
+                return;
+            }
+
+            STAGED_VIRTUAL_MODES.put(
+                atlas,
+                new VirtualMode(
+                    selectedGeneration,
+                    virtual
+                )
+            );
+        }
+    }
+
+    public static boolean virtualMode(
+        Identifier atlas
+    ) {
+        if (atlas.equals(CURRENT_ATLAS.get())) {
+            VirtualMode staged =
+                STAGED_VIRTUAL_MODES.get(atlas);
+
+            Long generation =
+                CURRENT_GENERATION.get();
+
+            return staged != null
+                && generation != null
+                && staged.generation() == generation
+                && staged.virtual();
+        }
+
+        ActiveAtlas active =
+            ACTIVE_ATLASES.get(atlas);
+
+        return active != null
+            && active.virtual();
+    }
+
     private static void clearStagedAtlas(
         Identifier atlas
     ) {
         STAGED_PLANS.remove(atlas);
+        STAGED_VIRTUAL_MODES.remove(atlas);
         UPLOADS.remove(atlas);
 
         PLACEMENTS.keySet().removeIf(
@@ -492,6 +561,9 @@ public final class PagesOfAtlasRegistry {
             staged =
                 STAGED_PLANS.get(logicalAtlas);
 
+            VirtualMode mode =
+                STAGED_VIRTUAL_MODES.get(logicalAtlas);
+
             if (
                 staged == null
                 || staged.generation()
@@ -509,7 +581,10 @@ public final class PagesOfAtlasRegistry {
                 new ActiveAtlas(
                     staged,
                     stagedPlacements(logicalAtlas),
-                    stagedDimensions(logicalAtlas)
+                    stagedDimensions(logicalAtlas),
+                    mode != null
+                        && mode.generation() == staged.generation()
+                        && mode.virtual()
                 )
             );
 
@@ -517,6 +592,7 @@ public final class PagesOfAtlasRegistry {
                 logicalAtlas,
                 staged
             );
+            STAGED_VIRTUAL_MODES.remove(logicalAtlas, mode);
         }
 
         if (
@@ -567,6 +643,7 @@ public final class PagesOfAtlasRegistry {
 
             ACTIVE_ATLASES.remove(logicalAtlas);
             STAGED_PLANS.remove(logicalAtlas);
+            STAGED_VIRTUAL_MODES.remove(logicalAtlas);
         }
 
         if (
@@ -722,12 +799,18 @@ public final class PagesOfAtlasRegistry {
     private record ActiveAtlas(
         AtlasPlan plan,
         Map<SpriteKey, Placement> placements,
-        Map<SpriteKey, SpriteDimensions> dimensions
+        Map<SpriteKey, SpriteDimensions> dimensions,
+        boolean virtual
     ) {}
 
     private record VanillaUpload(
         Identifier logicalAtlas,
         long generation
+    ) {}
+
+    private record VirtualMode(
+        long generation,
+        boolean virtual
     ) {}
 
     private record SpriteKey(

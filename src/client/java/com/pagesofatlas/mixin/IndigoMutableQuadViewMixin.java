@@ -57,7 +57,7 @@ public abstract class IndigoMutableQuadViewMixin {
             bakedQuad.materialInfo().sprite();
 
         if (
-            PagesOfAtlasVirtualAtlas.enabledFor(
+            PagesOfAtlasVirtualAtlas.activeFor(
                 sprite.atlasLocation()
             )
         ) {
@@ -95,7 +95,7 @@ public abstract class IndigoMutableQuadViewMixin {
             (MutableQuadView)(Object)this;
 
         if (
-            PagesOfAtlasVirtualAtlas.enabled()
+            PagesOfAtlasVirtualAtlas.active()
             && VirtualAtlasDiagnostics.enabled()
         ) {
             VirtualAtlasDiagnostics.inspect(

@@ -88,7 +88,7 @@ public abstract class TextureAtlasMixin {
         CallbackInfoReturnable<SpriteFinder> cir
     ) {
         if (
-            !PagesOfAtlasVirtualAtlas.enabledFor(location)
+            !PagesOfAtlasVirtualAtlas.activeFor(location)
             || PagesOfAtlasRegistry.plan(location).isEmpty()
         ) {
             return;
@@ -118,7 +118,7 @@ public abstract class TextureAtlasMixin {
         CallbackInfoReturnable<Object> cir
     ) {
         if (
-            !PagesOfAtlasVirtualAtlas.enabledFor(location)
+            !PagesOfAtlasVirtualAtlas.activeFor(location)
             || PagesOfAtlasRegistry.plan(location).isEmpty()
         ) {
             return;

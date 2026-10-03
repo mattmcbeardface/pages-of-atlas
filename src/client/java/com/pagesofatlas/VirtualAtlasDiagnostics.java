@@ -62,7 +62,7 @@ public final class VirtualAtlasDiagnostics {
             new ConcurrentHashMap<>();
 
     public static boolean enabled() {
-        return PagesOfAtlasVirtualAtlas.enabled()
+        return PagesOfAtlasVirtualAtlas.active()
             && ENABLED;
     }
 
@@ -190,7 +190,7 @@ public final class VirtualAtlasDiagnostics {
         float[] u,
         float[] v
     ) {
-        if (!PagesOfAtlasVirtualAtlas.enabled()) {
+        if (!PagesOfAtlasVirtualAtlas.active()) {
             return;
         }
 

@@ -68,7 +68,7 @@ public abstract class IrisXHFPTerrainVertexMixin {
          * Sodium material bits 3-4 therefore need to move into
          * bits 19-20 of this packed integer.
          */
-        if (!PagesOfAtlasVirtualAtlas.enabled()) {
+        if (!PagesOfAtlasVirtualAtlas.active()) {
             packed |=
                 (materialBits & 0x18) << 16;
         }

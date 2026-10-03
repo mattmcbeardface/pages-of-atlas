@@ -59,7 +59,7 @@ public abstract class IndigoExtendedItemFeatureRendererMixin {
         @Local(argsOnly = true) MutableQuadViewImpl quad
     ) {
         int page =
-            PagesOfAtlasVirtualAtlas.enabled()
+            PagesOfAtlasVirtualAtlas.active()
                 ? PagesOfAtlasItemRendering.virtualPage(
                     quad
                 )
@@ -73,7 +73,7 @@ public abstract class IndigoExtendedItemFeatureRendererMixin {
 
         pagesofatlas$currentItemPage = page;
         pagesofatlas$virtualItemRoute =
-            PagesOfAtlasVirtualAtlas.enabled()
+            PagesOfAtlasVirtualAtlas.active()
                 && selected != original;
 
         return selected;

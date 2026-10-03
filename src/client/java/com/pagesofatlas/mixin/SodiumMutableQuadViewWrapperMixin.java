@@ -49,7 +49,7 @@ public abstract class SodiumMutableQuadViewWrapperMixin {
             bakedQuad.materialInfo().sprite();
 
         if (
-            PagesOfAtlasVirtualAtlas.enabledFor(
+            PagesOfAtlasVirtualAtlas.activeFor(
                 sprite.atlasLocation()
             )
         ) {

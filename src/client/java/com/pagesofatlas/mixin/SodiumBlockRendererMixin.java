@@ -47,7 +47,7 @@ public abstract class SodiumBlockRendererMixin {
         @Coerce Object quad,
         CallbackInfo ci
     ) {
-        if (PagesOfAtlasVirtualAtlas.enabled()) {
+        if (PagesOfAtlasVirtualAtlas.active()) {
             if (VirtualAtlasDiagnostics.enabled()) {
                 VirtualAtlasDiagnostics.inspectSodium(
                     "Sodium final terrain compilation",
@@ -88,7 +88,7 @@ public abstract class SodiumBlockRendererMixin {
     private int pagesofatlas$encodePageInMaterial(
         int original
     ) {
-        if (PagesOfAtlasVirtualAtlas.enabled()) {
+        if (PagesOfAtlasVirtualAtlas.active()) {
             return original;
         }
 
@@ -112,7 +112,7 @@ public abstract class SodiumBlockRendererMixin {
         @Coerce Object quad,
         CallbackInfo ci
     ) {
-        if (PagesOfAtlasVirtualAtlas.enabled()) {
+        if (PagesOfAtlasVirtualAtlas.active()) {
             return;
         }
 

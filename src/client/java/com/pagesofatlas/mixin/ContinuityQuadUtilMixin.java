@@ -45,7 +45,7 @@ public abstract class ContinuityQuadUtilMixin {
         CallbackInfo ci
     ) {
         if (
-            PagesOfAtlasVirtualAtlas.enabledFor(
+            PagesOfAtlasVirtualAtlas.activeFor(
                 newSprite.atlasLocation()
             )
         ) {

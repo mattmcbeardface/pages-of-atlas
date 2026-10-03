@@ -54,7 +54,7 @@ public abstract class ItemFeatureRendererMixin {
     ) {
         int page;
 
-        if (PagesOfAtlasVirtualAtlas.enabled()) {
+        if (PagesOfAtlasVirtualAtlas.active()) {
             page =
                 PagesOfAtlasItemRendering.virtualPage(
                     quad
@@ -77,7 +77,7 @@ public abstract class ItemFeatureRendererMixin {
 
         pagesofatlas$currentItemPage = page;
         pagesofatlas$virtualItemRoute =
-            PagesOfAtlasVirtualAtlas.enabled()
+            PagesOfAtlasVirtualAtlas.active()
                 && selected != original;
 
         return selected;

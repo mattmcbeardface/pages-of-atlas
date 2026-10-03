@@ -192,31 +192,10 @@ public abstract class SpriteLoaderMixin {
         PagesOfAtlasPager.Result<SpriteContents>
             result;
 
-        boolean virtualAtlasProof =
-            PagesOfAtlasVirtualAtlas.enabledFor(
-                location
-            );
+        boolean virtualAtlas = false;
 
         try {
-            if (virtualAtlasProof) {
-                if (
-                    maxSupportedTextureSize
-                        < PagesOfAtlasVirtualAtlas.CELL_SIZE
-                ) {
-                    throw new IllegalStateException(
-                        "The virtual-atlas proof requires 16384x16384 texture support; reported maximum is "
-                            + maxSupportedTextureSize
-                    );
-                }
-
-                result =
-                    PagesOfAtlasPager.packVirtualAtlasProof(
-                        sprites,
-                        mipLevel,
-                        padding,
-                        pagesofatlas$VIRTUAL_PAGE_ANCHORS
-                    );
-            } else if (paintingBack != null) {
+            if (paintingBack != null) {
                 result =
                     PagesOfAtlasPager.packWithReplicatedEntry(
                         sprites,
@@ -236,7 +215,38 @@ public abstract class SpriteLoaderMixin {
                         padding
                     );
             }
+
+            virtualAtlas =
+                PagesOfAtlasVirtualAtlas.selectForCurrentStitch(
+                    location,
+                    result.pages().size() > 1
+                );
+
+            if (virtualAtlas) {
+                if (
+                    maxSupportedTextureSize
+                        < PagesOfAtlasVirtualAtlas.CELL_SIZE
+                ) {
+                    throw new IllegalStateException(
+                        "The virtual atlas requires 16384x16384 texture support; reported maximum is "
+                            + maxSupportedTextureSize
+                    );
+                }
+
+                result =
+                    PagesOfAtlasPager.packVirtualAtlas(
+                        sprites,
+                        mipLevel,
+                        padding,
+                        pagesofatlas$VIRTUAL_PAGE_ANCHORS
+                    );
+            }
         } catch (Throwable t) {
+            PagesOfAtlasVirtualAtlas.selectForCurrentStitch(
+                location,
+                false
+            );
+
             PagesOfAtlasClient.LOGGER.error(
                 "PagesOfAtlas preflight failed for {}",
                 location,
@@ -367,7 +377,7 @@ public abstract class SpriteLoaderMixin {
                 TextureAtlasSprite logicalSprite =
                     sprite;
 
-                if (virtualAtlasProof) {
+                if (virtualAtlas) {
                     logicalSprite =
                         new LogicalVirtualAtlasSprite(
                             location,
@@ -538,12 +548,12 @@ public abstract class SpriteLoaderMixin {
          */
         SpriteLoader.Preparations combined =
             new SpriteLoader.Preparations(
-                virtualAtlasProof
+                virtualAtlas
                     ? PagesOfAtlasVirtualAtlas.VIRTUAL_SIZE
                     : result.pages()
                         .getFirst()
                         .width(),
-                virtualAtlasProof
+                virtualAtlas
                     ? PagesOfAtlasVirtualAtlas.VIRTUAL_SIZE
                     : result.pages()
                         .getFirst()
@@ -593,9 +603,9 @@ public abstract class SpriteLoaderMixin {
             )
         );
 
-        if (virtualAtlasProof) {
-            PagesOfAtlasClient.LOGGER.warn(
-                "[VIRTUAL ATLAS POC] Exposed {} as one logical {}x{} atlas; the combined preparation is intercepted and never allocated on the GPU",
+        if (virtualAtlas) {
+            PagesOfAtlasClient.LOGGER.info(
+                "[VIRTUAL ATLAS] Exposed {} as one logical {}x{} atlas; the combined preparation is intercepted and never allocated on the GPU",
                 location,
                 PagesOfAtlasVirtualAtlas.VIRTUAL_SIZE,
                 PagesOfAtlasVirtualAtlas.VIRTUAL_SIZE
@@ -606,8 +616,8 @@ public abstract class SpriteLoaderMixin {
                 page < pagesofatlas$VIRTUAL_PAGE_ANCHORS.size();
                 page++
             ) {
-                PagesOfAtlasClient.LOGGER.warn(
-                    "[VIRTUAL ATLAS POC] Deliberate page {} anchor: {} (cell {},{})",
+                PagesOfAtlasClient.LOGGER.debug(
+                    "[VIRTUAL ATLAS] Page {} anchor: {} (cell {},{})",
                     page,
                     result.pages()
                         .get(page)

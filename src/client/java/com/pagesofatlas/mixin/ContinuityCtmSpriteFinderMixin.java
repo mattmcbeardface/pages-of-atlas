@@ -51,7 +51,7 @@ public abstract class ContinuityCtmSpriteFinderMixin {
         SpriteFinder originalFinder,
         QuadView quad
     ) {
-        if (PagesOfAtlasVirtualAtlas.enabled()) {
+        if (PagesOfAtlasVirtualAtlas.active()) {
             return originalFinder.find(quad);
         }
 

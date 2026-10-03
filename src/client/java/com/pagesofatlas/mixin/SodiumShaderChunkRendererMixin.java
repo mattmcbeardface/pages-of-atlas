@@ -98,7 +98,7 @@ public abstract class SodiumShaderChunkRendererMixin {
     ) {
         return Identifier.fromNamespaceAndPath(
             "pagesofatlas",
-            PagesOfAtlasVirtualAtlas.enabled()
+            PagesOfAtlasVirtualAtlas.active()
                 ? "blocks/block_layer_virtual"
                 : "blocks/block_layer_opaque"
         );
@@ -119,7 +119,7 @@ public abstract class SodiumShaderChunkRendererMixin {
     ) {
         return Identifier.fromNamespaceAndPath(
             "pagesofatlas",
-            PagesOfAtlasVirtualAtlas.enabled()
+            PagesOfAtlasVirtualAtlas.active()
                 ? "blocks/block_layer_virtual"
                 : "blocks/block_layer_opaque"
         );

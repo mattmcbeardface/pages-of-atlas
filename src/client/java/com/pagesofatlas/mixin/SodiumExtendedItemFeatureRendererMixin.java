@@ -61,7 +61,7 @@ public abstract class SodiumExtendedItemFeatureRendererMixin {
         int page = 0;
 
         if (
-            PagesOfAtlasVirtualAtlas.enabled()
+            PagesOfAtlasVirtualAtlas.active()
             && quad instanceof SodiumQuadUvAccess access
         ) {
             page =
@@ -102,7 +102,7 @@ public abstract class SodiumExtendedItemFeatureRendererMixin {
             );
 
         pagesofatlas$virtualItemRoute =
-            PagesOfAtlasVirtualAtlas.enabled()
+            PagesOfAtlasVirtualAtlas.active()
                 && selected != original;
 
         return selected;

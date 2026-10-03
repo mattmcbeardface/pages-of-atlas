@@ -19,6 +19,8 @@
     "SodiumMutableQuadViewWrapperMixin",
     "SodiumBlockRendererMixin",
     "SodiumExtendedItemFeatureRendererMixin",
+    "SodiumExtendedBlockModelFeatureRendererMixin",
+    "SodiumExtendedBlockModelBufferCacheMixin",
     "IrisXHFPTerrainVertexMixin",
     "IrisTransformPatcherMixin",
     "IrisRenderingPipelineMixin",

@@ -163,7 +163,7 @@ public final class PagesOfAtlasItemRendering {
             reportedInvalidVirtualQuad = true;
 
             PagesOfAtlasClient.LOGGER.error(
-                "[VIRTUAL ATLAS POC] Item quad did not resolve to one physical page; pages={},{},{},{} uv0=({}, {}) uv1=({}, {}) uv2=({}, {}) uv3=({}, {})",
+                "[VIRTUAL ATLAS] Item quad did not resolve to one physical page; pages={},{},{},{} uv0=({}, {}) uv1=({}, {}) uv2=({}, {}) uv3=({}, {})",
                 page0,
                 page1,
                 page2,

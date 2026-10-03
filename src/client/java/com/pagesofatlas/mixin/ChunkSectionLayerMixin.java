@@ -41,7 +41,7 @@ public abstract class ChunkSectionLayerMixin {
             (ChunkSectionLayer)(Object)this;
 
         boolean virtual =
-            PagesOfAtlasVirtualAtlas.enabled();
+            PagesOfAtlasVirtualAtlas.active();
 
         switch (self) {
             case SOLID ->

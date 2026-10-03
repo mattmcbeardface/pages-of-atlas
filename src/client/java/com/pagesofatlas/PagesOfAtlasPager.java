@@ -29,12 +29,12 @@ public final class PagesOfAtlasPager {
     }
 
     /**
-     * Deliberately produces the proof-of-concept four-page block layout.
-     * One named, recognizable sprite is seeded onto each page, then all
-     * remaining entries use the existing first-fit page packer.
+     * Produces the four-page physical layout used by the 32K virtual atlas.
+     * One stable sprite is seeded onto each page, then all remaining entries
+     * use the existing first-fit page packer.
      */
     public static <T extends Stitcher.Entry> Result<T>
-        packVirtualAtlasProof(
+        packVirtualAtlas(
             List<T> input,
             int mipLevel,
             int padding,
@@ -44,7 +44,7 @@ public final class PagesOfAtlasPager {
             != PagesOfAtlasVirtualAtlas.PAGE_COUNT) {
 
             throw new IllegalArgumentException(
-                "The virtual-atlas proof requires exactly four page anchors"
+                "The virtual atlas requires exactly four page anchors"
             );
         }
 
@@ -63,7 +63,7 @@ public final class PagesOfAtlasPager {
                 > PagesOfAtlasVirtualAtlas.PAGE_COUNT
         ) {
             throw new IllegalStateException(
-                "The 32K virtual-atlas proof supports exactly four cells, but baseline packing needs "
+                "The 32K virtual atlas supports exactly four cells, but baseline packing needs "
                     + baseline.pages().size()
                     + " pages"
             );
@@ -120,7 +120,7 @@ public final class PagesOfAtlasPager {
                 pageAnchors.get(page);
 
             Holder<T> holder =
-                findVirtualProofAnchor(
+                findVirtualPageAnchor(
                     holders,
                     pages.get(page),
                     anchor,
@@ -149,7 +149,7 @@ public final class PagesOfAtlasPager {
                 )
             ) {
                 throw new IllegalStateException(
-                    "Virtual-atlas proof cannot relocate anchor to page "
+                    "Virtual atlas cannot relocate anchor to page "
                         + page
                         + ": "
                         + holder.entry.name()
@@ -212,7 +212,7 @@ public final class PagesOfAtlasPager {
 
                 if (!moved) {
                     throw new IllegalStateException(
-                        "Virtual-atlas proof cannot place a second sprite on page "
+                        "Virtual atlas cannot place a second sprite on page "
                             + page
                     );
                 }
@@ -225,7 +225,7 @@ public final class PagesOfAtlasPager {
     }
 
     private static <T extends Stitcher.Entry> Holder<T>
-        findVirtualProofAnchor(
+        findVirtualPageAnchor(
             List<Holder<T>> holders,
             Page<T> target,
             Identifier preferred,
@@ -297,7 +297,7 @@ public final class PagesOfAtlasPager {
             )
             .orElseThrow(() ->
                 new IllegalStateException(
-                    "Virtual-atlas proof anchor is missing: "
+                    "Virtual-atlas anchor is missing: "
                         + preferred
                 )
             );

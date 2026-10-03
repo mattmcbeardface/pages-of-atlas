@@ -64,7 +64,7 @@ public abstract class TextureAtlasSpriteMixin
         CallbackInfo ci
     ) {
         if (
-            PagesOfAtlasVirtualAtlas.enabledFor(
+            PagesOfAtlasVirtualAtlas.activeFor(
                 atlasLocation
             )
         ) {
