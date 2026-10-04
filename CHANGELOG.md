@@ -2,6 +2,67 @@
 
 Notable user-facing changes to Pages of Atlas are documented here.
 
+## [0.4.0] - 2026-10-03
+
+0.4.0 replaces the previous direct multi-page block-atlas rendering model with
+a production virtual-atlas architecture for oversized resource packs.
+
+### Added
+
+- Added a fixed 32768x32768 logical block-atlas address space backed by four
+  independently allocated physical atlas pages, each capped at the GPU-safe
+  16384x16384 texture size.
+- Added automatic virtual-atlas activation when the block atlas requires more
+  than one physical texture. Resource packs that fit on one page continue to
+  use Minecraft's normal single-atlas path.
+- Added logical virtual sprites so Minecraft, Fabric Renderer API, Sodium, and
+  Continuity can operate in one continuous sprite/UV space while Pages of
+  Atlas retains separate physical sprites for GPU upload.
+- Added dedicated virtual-atlas terrain shaders for Minecraft and Sodium.
+- Added page-aware item and block-model rendering for vanilla/Fabric Renderer
+  API, Indigo, and Sodium rendering paths.
+- Added page-aware Sodium extended block-model rendering used by item frames
+  and other block-model feature renderers.
+- Added generation-aware publication of virtual atlas plans and uploads so an
+  atlas generation becomes active only after its physical-page state is ready.
+- Added optional virtual-atlas diagnostics for validating logical placement,
+  physical-page routing, and UV conversion.
+
+### Changed
+
+- Reworked oversized block-atlas packing around one logical atlas instead of
+  exposing physical pages directly to normal sprite lookup and rendering.
+- Terrain now carries or derives physical-page ownership from logical atlas
+  UVs and converts those coordinates to page-local UVs at render time.
+- Reworked block-item rendering to resolve the correct physical page per quad.
+- Updated Fabric Renderer API and Indigo quad handling for logical-to-physical
+  page translation.
+- Updated Sodium sprite lookup and terrain rendering for the logical atlas.
+- Updated Continuity CTM lookup to search the combined logical sprite space.
+- Expanded Iris shader transformation support for virtual-atlas UV conversion,
+  physical-page sampling, and PBR companion textures.
+- Preserved normal/specular PBR page alignment with the corresponding diffuse
+  physical page.
+- Removed the previous proof-of-concept activation path; oversized block
+  atlases now select the production virtual renderer automatically.
+
+### Fixed
+
+- Fixed item-frame and Sodium extended block-model rendering when a block
+  texture resides on a secondary physical atlas page.
+- Fixed logical sprite lookup for Fabric Renderer API, Sodium, and Continuity
+  while retaining physical page-zero state required by upload and PBR code.
+- Fixed page-local terrain sampling so implicit derivatives and mip selection
+  remain correct after virtual-to-physical UV conversion.
+- Fixed Photon POM coordinate routing through the virtual atlas.
+- Fixed Solas compatibility for shader programs whose mid-texture-coordinate
+  inputs differ from other Iris shader packs.
+
+### Compatibility
+
+Validated on Minecraft 26.2 with high-resolution Patrix resource packs,
+Sodium, Iris, Continuity, Photon, Solas, and Complementary / Unbound.
+
 ## [0.3.15] - 2026-09-07
 
 ### Fixed
@@ -86,6 +147,7 @@ Notable user-facing changes to Pages of Atlas are documented here.
 - Targets Minecraft 26.2, Fabric Loader 0.19.3 or newer, Fabric API 0.156.0 or
   newer, and Java 25.
 
+[0.4.0]: https://github.com/mattmcbeardface/pages-of-atlas/releases/tag/v0.4.0-26.2
 [0.3.15]: https://github.com/mattmcbeardface/pages-of-atlas/releases/tag/v0.3.15
 [0.3.14]: https://github.com/mattmcbeardface/pages-of-atlas/releases/tag/v0.3.14
 [0.3.13]: https://github.com/mattmcbeardface/pages-of-atlas/releases/tag/v0.3.13
