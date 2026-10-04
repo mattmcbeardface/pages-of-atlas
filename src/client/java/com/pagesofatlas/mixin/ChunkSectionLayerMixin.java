@@ -1,6 +1,6 @@
 package com.pagesofatlas.mixin;
 
-import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 
 import com.pagesofatlas.PagesOfAtlasRegistry;
 import com.pagesofatlas.PagesOfAtlasRenderPipelines;
@@ -23,6 +23,7 @@ public abstract class ChunkSectionLayerMixin {
         cancellable = true
     )
     private void pagesofatlas$pipeline(
+        boolean multiDraw,
         CallbackInfoReturnable<RenderPipeline> cir
     ) {
         boolean splitActive =
@@ -47,22 +48,34 @@ public abstract class ChunkSectionLayerMixin {
             case SOLID ->
                 cir.setReturnValue(
                     virtual
-                        ? PagesOfAtlasRenderPipelines.VIRTUAL_SOLID
-                        : PagesOfAtlasRenderPipelines.SOLID
+                        ? (multiDraw
+                            ? PagesOfAtlasRenderPipelines.VIRTUAL_SOLID_MULTIDRAW
+                            : PagesOfAtlasRenderPipelines.VIRTUAL_SOLID)
+                        : (multiDraw
+                            ? PagesOfAtlasRenderPipelines.SOLID_MULTIDRAW
+                            : PagesOfAtlasRenderPipelines.SOLID)
                 );
 
             case CUTOUT ->
                 cir.setReturnValue(
                     virtual
-                        ? PagesOfAtlasRenderPipelines.VIRTUAL_CUTOUT
-                        : PagesOfAtlasRenderPipelines.CUTOUT
+                        ? (multiDraw
+                            ? PagesOfAtlasRenderPipelines.VIRTUAL_CUTOUT_MULTIDRAW
+                            : PagesOfAtlasRenderPipelines.VIRTUAL_CUTOUT)
+                        : (multiDraw
+                            ? PagesOfAtlasRenderPipelines.CUTOUT_MULTIDRAW
+                            : PagesOfAtlasRenderPipelines.CUTOUT)
                 );
 
             case TRANSLUCENT ->
                 cir.setReturnValue(
                     virtual
-                        ? PagesOfAtlasRenderPipelines.VIRTUAL_TRANSLUCENT
-                        : PagesOfAtlasRenderPipelines.TRANSLUCENT
+                        ? (multiDraw
+                            ? PagesOfAtlasRenderPipelines.VIRTUAL_TRANSLUCENT_MULTIDRAW
+                            : PagesOfAtlasRenderPipelines.VIRTUAL_TRANSLUCENT)
+                        : (multiDraw
+                            ? PagesOfAtlasRenderPipelines.TRANSLUCENT_MULTIDRAW
+                            : PagesOfAtlasRenderPipelines.TRANSLUCENT)
                 );
         }
     }

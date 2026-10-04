@@ -90,6 +90,7 @@ public abstract class IrisTransformPatcherMixin {
         String fragment,
         @Coerce Object alphaTest,
         @Coerce Object textureMap,
+        @Coerce Object textureOverrides,
         boolean shadow,
         CallbackInfoReturnable<Map<?, String>> cir
     ) {

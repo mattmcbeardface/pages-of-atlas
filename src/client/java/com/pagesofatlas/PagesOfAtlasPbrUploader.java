@@ -5,7 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.renderpearl.api.commands.CommandEncoder;
 import com.mojang.blaze3d.systems.RenderSystem;
 
 import net.minecraft.client.Minecraft;
@@ -603,7 +603,7 @@ public final class PagesOfAtlasPbrUploader {
                 new ArrayList<>();
 
         void queue(
-            com.mojang.blaze3d.textures.GpuTexture texture,
+            com.mojang.renderpearl.api.textures.GpuTexture texture,
             NativeImage image,
             int destX,
             int destY,
@@ -682,7 +682,7 @@ public final class PagesOfAtlasPbrUploader {
     }
 
     private record PendingPbrUpload(
-        com.mojang.blaze3d.textures.GpuTexture texture,
+        com.mojang.renderpearl.api.textures.GpuTexture texture,
         NativeImage image,
         int destX,
         int destY,

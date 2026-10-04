@@ -1,55 +1,73 @@
 #version 330
+#extension GL_ARB_separate_shader_objects : require
 
-#moj_import <minecraft:fog.glsl>
-#moj_import <minecraft:globals.glsl>
-#moj_import <minecraft:chunksection.glsl>
+#include <minecraft:fog.glsl>
+#include <minecraft:globals.glsl>
+#include <minecraft:oit.glsl>
+#include <minecraft:terrainglobals.glsl>
+#ifndef MULTIDRAW_TERRAIN
+    #include <minecraft:chunksection.glsl>
+#endif
 
 uniform sampler2D Sampler0;
 uniform sampler2D Sampler1;
 uniform sampler2D Sampler3;
 uniform sampler2D Sampler4;
 
-in float sphericalVertexDistance;
-in float cylindricalVertexDistance;
-in vec4 vertexColor;
-in vec2 texCoord0;
-flat in int pagesofatlasPage;
+layout(location = 0) in float sphericalVertexDistance;
+layout(location = 1) in float cylindricalVertexDistance;
+layout(location = 2) in vec4 vertexColor;
+layout(location = 3) in vec2 texCoord0;
+layout(location = 4) in float chunkVisibility;
+layout(location = 5) flat in int pagesofatlasPage;
 
-out vec4 fragColor;
+#ifndef OIT_ALPHA_ONLY
+layout(location = 0) out vec4 fragColor;
+#endif
 
-vec4 pagesofatlasSample(
-    sampler2D source,
-    vec2 uv
-) {
-    /*
-     * page-local UV is interpolated, so implicit derivatives and ordinary
-     * hardware mip selection remain valid within the selected page.
-     */
-    return texture(source, uv);
+vec4 pagesofatlasFinalColor(vec4 color) {
+#ifdef OIT_ACCUMULATE
+    color = sampleColorForAccumulation(color);
+    vec4 fogColor =
+        vec4(FogColor.rgb * color.a, FogColor.a);
+#else
+    vec4 fogColor = FogColor;
+#endif
+
+    return apply_fog(
+        color,
+        sphericalVertexDistance,
+        cylindricalVertexDistance,
+        FogEnvironmentalStart,
+        FogEnvironmentalEnd,
+        FogRenderDistanceStart,
+        FogRenderDistanceEnd,
+        fogColor
+    );
 }
 
 void main() {
     vec4 sampled;
 
     if (pagesofatlasPage == 1) {
-        sampled = pagesofatlasSample(Sampler1, texCoord0);
+        sampled = texture(Sampler1, texCoord0);
     } else if (pagesofatlasPage == 2) {
-        sampled = pagesofatlasSample(Sampler3, texCoord0);
+        sampled = texture(Sampler3, texCoord0);
     } else if (pagesofatlasPage == 3) {
-        sampled = pagesofatlasSample(Sampler4, texCoord0);
+        sampled = texture(Sampler4, texCoord0);
     } else {
-        sampled = pagesofatlasSample(Sampler0, texCoord0);
+        sampled = texture(Sampler0, texCoord0);
     }
 
-    vec4 color =
-        sampled * vertexColor;
+    vec4 color = sampled * vertexColor;
 
-    color =
-        mix(
-            FogColor * vec4(1, 1, 1, color.a),
-            color,
-            ChunkVisibility
-        );
+#ifndef OIT_ALPHA_ONLY
+    color = mix(
+        FogColor * vec4(1, 1, 1, color.a),
+        color,
+        chunkVisibility
+    );
+#endif
 
 #ifdef ALPHA_CUTOUT
     if (color.a < ALPHA_CUTOUT) {
@@ -57,15 +75,9 @@ void main() {
     }
 #endif
 
-    fragColor =
-        apply_fog(
-            color,
-            sphericalVertexDistance,
-            cylindricalVertexDistance,
-            FogEnvironmentalStart,
-            FogEnvironmentalEnd,
-            FogRenderDistanceStart,
-            FogRenderDistanceEnd,
-            FogColor
-        );
+#ifdef OIT_ALPHA_ONLY
+    executeAlphaOnlyPhase(gl_FragCoord.z, color.a);
+#else
+    fragColor = pagesofatlasFinalColor(color);
+#endif
 }

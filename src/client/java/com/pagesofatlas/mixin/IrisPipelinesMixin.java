@@ -1,6 +1,6 @@
 package com.pagesofatlas.mixin;
 
-import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.pagesofatlas.PagesOfAtlasRenderPipelines;
 
 import net.minecraft.client.renderer.RenderPipelines;

@@ -1,8 +1,8 @@
 package com.pagesofatlas.mixin;
 
-import com.mojang.blaze3d.systems.RenderPass;
-import com.mojang.blaze3d.textures.GpuSampler;
-import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.renderpearl.api.commands.RenderPass;
+import com.mojang.renderpearl.api.textures.GpuSampler;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
 
 import com.pagesofatlas.PagesOfAtlasIrisPbrCompat;
 import com.pagesofatlas.PagesOfAtlasPbrDemand;
@@ -31,7 +31,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class SodiumDefaultChunkRendererMixin {
 
     /*
-     * Sodium's second bindTexture() invocation is u_BlockTex.
+     * Sodium's second texture setUniform() invocation is u_BlockTex.
      *
      * Bind diffuse page zero normally, then expose POA diffuse
      * pages 1-3 plus POA-owned PBR page 2.
@@ -41,7 +41,7 @@ public abstract class SodiumDefaultChunkRendererMixin {
         at = @At(
             value = "INVOKE",
             target =
-                "Lcom/mojang/blaze3d/systems/RenderPass;bindTexture(Ljava/lang/String;Lcom/mojang/blaze3d/textures/GpuTextureView;Lcom/mojang/blaze3d/textures/GpuSampler;)V",
+                "Lcom/mojang/renderpearl/api/commands/RenderPass;setUniform(Ljava/lang/String;Lcom/mojang/renderpearl/api/textures/GpuTextureView;Lcom/mojang/renderpearl/api/textures/GpuSampler;)V",
             ordinal = 1
         ),
         remap = false
@@ -55,7 +55,7 @@ public abstract class SodiumDefaultChunkRendererMixin {
         /*
          * Original Sodium block texture binding.
          */
-        renderPass.bindTexture(
+        renderPass.setUniform(
             name,
             pageZero,
             sampler
@@ -273,13 +273,13 @@ public abstract class SodiumDefaultChunkRendererMixin {
         boolean pageExists
     ) {
         if (!pageExists) {
-            renderPass.bindTexture(
+            renderPass.setUniform(
                 normalSamplerName,
                 fallback,
                 sampler
             );
 
-            renderPass.bindTexture(
+            renderPass.setUniform(
                 specularSamplerName,
                 fallback,
                 sampler
@@ -298,7 +298,7 @@ public abstract class SodiumDefaultChunkRendererMixin {
                 page
             );
 
-        renderPass.bindTexture(
+        renderPass.setUniform(
             normalSamplerName,
             normal != null
                 ? normal
@@ -306,7 +306,7 @@ public abstract class SodiumDefaultChunkRendererMixin {
             sampler
         );
 
-        renderPass.bindTexture(
+        renderPass.setUniform(
             specularSamplerName,
             specular != null
                 ? specular
@@ -325,7 +325,7 @@ public abstract class SodiumDefaultChunkRendererMixin {
         GpuSampler sampler
     ) {
         if (page >= plan.pageCount()) {
-            renderPass.bindTexture(
+            renderPass.setUniform(
                 samplerName,
                 fallback,
                 sampler
@@ -338,7 +338,7 @@ public abstract class SodiumDefaultChunkRendererMixin {
             plan.page(page);
 
         if (pageOptional.isEmpty()) {
-            renderPass.bindTexture(
+            renderPass.setUniform(
                 samplerName,
                 fallback,
                 sampler
@@ -357,7 +357,7 @@ public abstract class SodiumDefaultChunkRendererMixin {
             texture == null
             || texture.getTextureView() == null
         ) {
-            renderPass.bindTexture(
+            renderPass.setUniform(
                 samplerName,
                 fallback,
                 sampler
@@ -366,7 +366,7 @@ public abstract class SodiumDefaultChunkRendererMixin {
             return;
         }
 
-        renderPass.bindTexture(
+        renderPass.setUniform(
             samplerName,
             texture.getTextureView(),
             sampler

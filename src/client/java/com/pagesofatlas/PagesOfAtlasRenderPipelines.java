@@ -1,15 +1,17 @@
 package com.pagesofatlas;
 
-import com.mojang.blaze3d.PrimitiveTopology;
-import com.mojang.blaze3d.pipeline.BindGroupLayout;
-import com.mojang.blaze3d.pipeline.BlendFunction;
-import com.mojang.blaze3d.pipeline.ColorTargetState;
-import com.mojang.blaze3d.pipeline.DepthStencilState;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
+import com.mojang.renderpearl.api.pipeline.BlendFunction;
+import com.mojang.renderpearl.api.pipeline.ColorTargetState;
+import com.mojang.renderpearl.api.pipeline.DepthStencilState;
+import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.UniformType;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 
 import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.client.renderer.oit.OitPipelineSet;
 import net.minecraft.resources.Identifier;
 
 public final class PagesOfAtlasRenderPipelines {
@@ -37,11 +39,11 @@ public final class PagesOfAtlasRenderPipelines {
 
     public static final BindGroupLayout TERRAIN_SPLIT_SAMPLERS =
         BindGroupLayout.builder()
-            .withSampler("Sampler0")
-            .withSampler("Sampler1")
-            .withSampler("Sampler2")
-            .withSampler("Sampler3")
-            .withSampler("Sampler4")
+            .withUniform("Sampler0", UniformType.COMBINED_IMAGE_SAMPLER)
+            .withUniform("Sampler1", UniformType.COMBINED_IMAGE_SAMPLER)
+            .withUniform("Sampler2", UniformType.COMBINED_IMAGE_SAMPLER)
+            .withUniform("Sampler3", UniformType.COMBINED_IMAGE_SAMPLER)
+            .withUniform("Sampler4", UniformType.COMBINED_IMAGE_SAMPLER)
             .build();
 
     private static final Identifier TERRAIN_VERTEX_SHADER =
@@ -88,11 +90,55 @@ public final class PagesOfAtlasRenderPipelines {
             .withBindGroupLayout(
                 BindGroupLayouts.CHUNK_SECTION
             )
+            .withBindGroupLayout(
+                BindGroupLayouts.TERRAIN_INFO
+            )
             .withVertexShader(
                 TERRAIN_VERTEX_SHADER
             )
             .withFragmentShader(
                 TERRAIN_FRAGMENT_SHADER
+            )
+            .buildSnippet();
+
+    private static final RenderPipeline.Snippet MULTIDRAW_TERRAIN =
+        RenderPipeline.builder(
+            RenderPipelines.GLOBALS_SNIPPET
+        )
+            .withBindGroupLayout(
+                BindGroupLayouts.FOG
+            )
+            .withBindGroupLayout(
+                TERRAIN_SPLIT_SAMPLERS
+            )
+            .withVertexBinding(
+                0,
+                DefaultVertexFormat.BLOCK
+            )
+            .withVertexBinding(
+                1,
+                DefaultVertexFormat.CHUNK_DATA_INSTANCED
+            )
+            .withPrimitiveTopology(
+                PrimitiveTopology.QUADS
+            )
+            .withDepthStencilState(
+                DepthStencilState.DEFAULT
+            )
+            .withBindGroupLayout(
+                BindGroupLayouts.PROJECTION
+            )
+            .withBindGroupLayout(
+                BindGroupLayouts.TERRAIN_INFO
+            )
+            .withVertexShader(
+                TERRAIN_VERTEX_SHADER
+            )
+            .withFragmentShader(
+                TERRAIN_FRAGMENT_SHADER
+            )
+            .withShaderDefine(
+                "MULTIDRAW_TERRAIN"
             )
             .buildSnippet();
 
@@ -145,6 +191,55 @@ public final class PagesOfAtlasRenderPipelines {
                 .build()
         );
 
+    public static final RenderPipeline SOLID_MULTIDRAW =
+        RenderPipelines.register(
+            RenderPipeline.builder(MULTIDRAW_TERRAIN)
+                .withLocation(
+                    Identifier.fromNamespaceAndPath(
+                        "pagesofatlas",
+                        "pipeline/solid_terrain_multidraw"
+                    )
+                )
+                .build()
+        );
+
+    public static final RenderPipeline CUTOUT_MULTIDRAW =
+        RenderPipelines.register(
+            RenderPipeline.builder(MULTIDRAW_TERRAIN)
+                .withLocation(
+                    Identifier.fromNamespaceAndPath(
+                        "pagesofatlas",
+                        "pipeline/cutout_terrain_multidraw"
+                    )
+                )
+                .withShaderDefine(
+                    "ALPHA_CUTOUT",
+                    0.5F
+                )
+                .build()
+        );
+
+    public static final RenderPipeline TRANSLUCENT_MULTIDRAW =
+        RenderPipelines.register(
+            RenderPipeline.builder(MULTIDRAW_TERRAIN)
+                .withLocation(
+                    Identifier.fromNamespaceAndPath(
+                        "pagesofatlas",
+                        "pipeline/translucent_terrain_multidraw"
+                    )
+                )
+                .withColorTargetState(
+                    new ColorTargetState(
+                        BlendFunction.TRANSLUCENT
+                    )
+                )
+                .withShaderDefine(
+                    "ALPHA_CUTOUT",
+                    0.1F
+                )
+                .build()
+        );
+
     private static final RenderPipeline.Snippet VIRTUAL_TERRAIN =
         RenderPipeline.builder(
             RenderPipelines.GLOBALS_SNIPPET
@@ -171,6 +266,19 @@ public final class PagesOfAtlasRenderPipelines {
             .withBindGroupLayout(
                 BindGroupLayouts.CHUNK_SECTION
             )
+            .withBindGroupLayout(
+                BindGroupLayouts.TERRAIN_INFO
+            )
+            .withVertexShader(
+                VIRTUAL_TERRAIN_SHADER
+            )
+            .withFragmentShader(
+                VIRTUAL_TERRAIN_SHADER
+            )
+            .buildSnippet();
+
+    private static final RenderPipeline.Snippet VIRTUAL_MULTIDRAW_TERRAIN =
+        RenderPipeline.builder(MULTIDRAW_TERRAIN)
             .withVertexShader(
                 VIRTUAL_TERRAIN_SHADER
             )
@@ -226,6 +334,127 @@ public final class PagesOfAtlasRenderPipelines {
                     0.1F
                 )
                 .build()
+        );
+
+    public static final RenderPipeline VIRTUAL_SOLID_MULTIDRAW =
+        RenderPipelines.register(
+            RenderPipeline.builder(VIRTUAL_MULTIDRAW_TERRAIN)
+                .withLocation(
+                    Identifier.fromNamespaceAndPath(
+                        "pagesofatlas",
+                        "pipeline/virtual_solid_terrain_multidraw"
+                    )
+                )
+                .build()
+        );
+
+    public static final RenderPipeline VIRTUAL_CUTOUT_MULTIDRAW =
+        RenderPipelines.register(
+            RenderPipeline.builder(VIRTUAL_MULTIDRAW_TERRAIN)
+                .withLocation(
+                    Identifier.fromNamespaceAndPath(
+                        "pagesofatlas",
+                        "pipeline/virtual_cutout_terrain_multidraw"
+                    )
+                )
+                .withShaderDefine(
+                    "ALPHA_CUTOUT",
+                    0.5F
+                )
+                .build()
+        );
+
+    public static final RenderPipeline VIRTUAL_TRANSLUCENT_MULTIDRAW =
+        RenderPipelines.register(
+            RenderPipeline.builder(VIRTUAL_MULTIDRAW_TERRAIN)
+                .withLocation(
+                    Identifier.fromNamespaceAndPath(
+                        "pagesofatlas",
+                        "pipeline/virtual_translucent_terrain_multidraw"
+                    )
+                )
+                .withColorTargetState(
+                    new ColorTargetState(
+                        BlendFunction.TRANSLUCENT
+                    )
+                )
+                .withShaderDefine(
+                    "ALPHA_CUTOUT",
+                    0.1F
+                )
+                .build()
+        );
+
+    public static final OitPipelineSet OIT_TERRAIN =
+        RenderPipelines.register(
+            OitPipelineSet.builder(
+                "pagesofatlas_terrain",
+                RenderPipeline.builder(TERRAIN)
+                    .withLocation(
+                        Identifier.fromNamespaceAndPath(
+                            "pagesofatlas",
+                            "pipeline/oit_terrain"
+                        )
+                    )
+                    .withShaderDefine(
+                        "ALPHA_CUTOUT",
+                        0.1F
+                    )
+            ).build()
+        );
+
+    public static final OitPipelineSet OIT_TERRAIN_MULTIDRAW =
+        RenderPipelines.register(
+            OitPipelineSet.builder(
+                "pagesofatlas_terrain_multidraw",
+                RenderPipeline.builder(MULTIDRAW_TERRAIN)
+                    .withLocation(
+                        Identifier.fromNamespaceAndPath(
+                            "pagesofatlas",
+                            "pipeline/oit_terrain_multidraw"
+                        )
+                    )
+                    .withShaderDefine(
+                        "ALPHA_CUTOUT",
+                        0.1F
+                    )
+            ).build()
+        );
+
+    public static final OitPipelineSet VIRTUAL_OIT_TERRAIN =
+        RenderPipelines.register(
+            OitPipelineSet.builder(
+                "pagesofatlas_virtual_terrain",
+                RenderPipeline.builder(VIRTUAL_TERRAIN)
+                    .withLocation(
+                        Identifier.fromNamespaceAndPath(
+                            "pagesofatlas",
+                            "pipeline/virtual_oit_terrain"
+                        )
+                    )
+                    .withShaderDefine(
+                        "ALPHA_CUTOUT",
+                        0.1F
+                    )
+            ).build()
+        );
+
+    public static final OitPipelineSet VIRTUAL_OIT_TERRAIN_MULTIDRAW =
+        RenderPipelines.register(
+            OitPipelineSet.builder(
+                "pagesofatlas_virtual_terrain_multidraw",
+                RenderPipeline.builder(VIRTUAL_MULTIDRAW_TERRAIN)
+                    .withLocation(
+                        Identifier.fromNamespaceAndPath(
+                            "pagesofatlas",
+                            "pipeline/virtual_oit_terrain_multidraw"
+                        )
+                    )
+                    .withShaderDefine(
+                        "ALPHA_CUTOUT",
+                        0.1F
+                    )
+            ).build()
         );
 
 

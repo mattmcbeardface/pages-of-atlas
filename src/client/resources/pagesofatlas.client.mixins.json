@@ -28,8 +28,7 @@
     "SodiumShaderChunkRendererMixin",
     "SodiumDefaultChunkRendererMixin",
     "ItemFeatureRendererMixin",
-    "IrisProgramSamplersMixin",
-    "GlProgramMixin"
+    "IrisProgramSamplersMixin"
   ],
   "injectors": {
     "defaultRequire": 1

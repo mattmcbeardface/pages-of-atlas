@@ -1,41 +1,61 @@
-#version 330 core
+#version 460 core
 
-#moj_import <sodium:globals.glsl>
-#moj_import <sodium:fog.glsl>
-#moj_import <sodium:chunk_material.glsl>
+#include <sodium:globals.glsl>
+#include <sodium:fog.glsl>
+#include <sodium:chunk_material.glsl>
+#include <minecraft:oit.glsl>
 
-in vec4 v_Color;
-in vec2 v_TexCoord;
-flat in uint v_PagesOfAtlasPage;
-in vec2 v_FragDistance;
-in float fadeFactor;
+layout(location = 0) in vec4 v_Color;
+layout(location = 1) in vec2 v_TexCoord;
+layout(location = 2) in vec2 v_FragDistance;
+layout(location = 3) in float fadeFactor;
+layout(location = 4) flat in uint v_PagesOfAtlasPage;
 
 uniform sampler2D u_BlockTex;
 uniform sampler2D u_BlockTex1;
 uniform sampler2D u_BlockTex2;
 uniform sampler2D u_BlockTex3;
 
-out vec4 fragColor;
+#ifndef OIT_ALPHA_ONLY
+layout(location = 0) out vec4 fragColor;
+#endif
 
-vec4 pagesofatlasSample(
-    sampler2D source,
-    vec2 uv
-) {
-    /* Local interpolation preserves page-correct implicit derivatives/LOD. */
-    return texture(source, uv);
+vec4 pagesofatlasFinalColor(vec4 color) {
+#ifdef OIT_ACCUMULATE
+    color = sampleColorForAccumulation(color);
+    vec4 fogColor =
+        vec4(u_FogColor.rgb * color.a, u_FogColor.a);
+#else
+    vec4 fogColor = u_FogColor;
+#endif
+
+#ifdef OIT_ALPHA_ONLY
+    float factor = 1.0;
+#else
+    float factor = fadeFactor;
+#endif
+
+    return _linearFog(
+        color,
+        v_FragDistance,
+        fogColor,
+        u_EnvironmentFog,
+        u_RenderFog,
+        factor
+    );
 }
 
 void main() {
     vec4 color;
 
     if (v_PagesOfAtlasPage == 1u) {
-        color = pagesofatlasSample(u_BlockTex1, v_TexCoord);
+        color = texture(u_BlockTex1, v_TexCoord);
     } else if (v_PagesOfAtlasPage == 2u) {
-        color = pagesofatlasSample(u_BlockTex2, v_TexCoord);
+        color = texture(u_BlockTex2, v_TexCoord);
     } else if (v_PagesOfAtlasPage == 3u) {
-        color = pagesofatlasSample(u_BlockTex3, v_TexCoord);
+        color = texture(u_BlockTex3, v_TexCoord);
     } else {
-        color = pagesofatlasSample(u_BlockTex, v_TexCoord);
+        color = texture(u_BlockTex, v_TexCoord);
     }
 
     color *= v_Color;
@@ -46,12 +66,9 @@ void main() {
     }
 #endif
 
-    fragColor = _linearFog(
-        color,
-        v_FragDistance,
-        u_FogColor,
-        u_EnvironmentFog,
-        u_RenderFog,
-        fadeFactor
-    );
+#ifdef OIT_ALPHA_ONLY
+    executeAlphaOnlyPhase(gl_FragCoord.z, color.a);
+#else
+    fragColor = pagesofatlasFinalColor(color);
+#endif
 }

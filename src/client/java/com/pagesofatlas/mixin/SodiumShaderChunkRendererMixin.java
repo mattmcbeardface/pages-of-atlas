@@ -1,7 +1,8 @@
 package com.pagesofatlas.mixin;
 
-import com.mojang.blaze3d.pipeline.BindGroupLayout;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.UniformType;
 
 import net.minecraft.resources.Identifier;
 
@@ -49,32 +50,31 @@ public abstract class SodiumShaderChunkRendererMixin {
     ) {
         BIND_GROUP =
             BindGroupLayout.builder()
-                .withSampler("u_LightTex")
-                .withSampler("u_BlockTex")
+                .withUniform("u_BlockTex", UniformType.COMBINED_IMAGE_SAMPLER)
 
-                .withSampler("u_BlockNormalTex0")
-                .withSampler("u_BlockSpecularTex0")
+                .withUniform("u_BlockNormalTex0", UniformType.COMBINED_IMAGE_SAMPLER)
+                .withUniform("u_BlockSpecularTex0", UniformType.COMBINED_IMAGE_SAMPLER)
 
-                .withSampler("u_BlockNormalTex1")
-                .withSampler("u_BlockSpecularTex1")
+                .withUniform("u_BlockNormalTex1", UniformType.COMBINED_IMAGE_SAMPLER)
+                .withUniform("u_BlockSpecularTex1", UniformType.COMBINED_IMAGE_SAMPLER)
 
-                .withSampler("u_BlockNormalTex2")
-                .withSampler("u_BlockSpecularTex2")
+                .withUniform("u_BlockNormalTex2", UniformType.COMBINED_IMAGE_SAMPLER)
+                .withUniform("u_BlockSpecularTex2", UniformType.COMBINED_IMAGE_SAMPLER)
 
-                .withSampler("u_BlockNormalTex3")
-                .withSampler("u_BlockSpecularTex3")
+                .withUniform("u_BlockNormalTex3", UniformType.COMBINED_IMAGE_SAMPLER)
+                .withUniform("u_BlockSpecularTex3", UniformType.COMBINED_IMAGE_SAMPLER)
 
-                .withSampler("u_BlockTex1")
-                .withSampler("u_BlockTex2")
-                .withSampler("u_BlockTex3")
+                .withUniform("u_BlockTex1", UniformType.COMBINED_IMAGE_SAMPLER)
+                .withUniform("u_BlockTex2", UniformType.COMBINED_IMAGE_SAMPLER)
+                .withUniform("u_BlockTex3", UniformType.COMBINED_IMAGE_SAMPLER)
                 .withUniform(
                     "u_Globals",
-                    com.mojang.blaze3d.shaders.UniformType.UNIFORM_BUFFER
+                    com.mojang.renderpearl.api.pipeline.UniformType.UNIFORM_BUFFER
                 )
                 .withUniform(
                     "u_SectionTimeInfo",
-                    com.mojang.blaze3d.shaders.UniformType.TEXEL_BUFFER,
-                    com.mojang.blaze3d.GpuFormat.R32_SINT
+                    com.mojang.renderpearl.api.pipeline.UniformType.TEXEL_BUFFER,
+                    com.mojang.renderpearl.api.GpuFormat.R32_SINT
                 )
                 .build();
     }
@@ -84,11 +84,11 @@ public abstract class SodiumShaderChunkRendererMixin {
      * PagesOfAtlas's page-aware terrain shaders.
      */
     @ModifyArg(
-        method = "createShader",
+        method = {"createShader", "createOITShader"},
         at = @At(
             value = "INVOKE",
             target =
-                "Lcom/mojang/blaze3d/pipeline/RenderPipeline$Builder;withVertexShader(Lnet/minecraft/resources/Identifier;)Lcom/mojang/blaze3d/pipeline/RenderPipeline$Builder;"
+                "Lcom/mojang/renderpearl/api/pipeline/RenderPipeline$Builder;withVertexShader(Lnet/minecraft/resources/Identifier;)Lcom/mojang/renderpearl/api/pipeline/RenderPipeline$Builder;"
         ),
         index = 0,
         remap = false
@@ -105,11 +105,11 @@ public abstract class SodiumShaderChunkRendererMixin {
     }
 
     @ModifyArg(
-        method = "createShader",
+        method = {"createShader", "createOITShader"},
         at = @At(
             value = "INVOKE",
             target =
-                "Lcom/mojang/blaze3d/pipeline/RenderPipeline$Builder;withFragmentShader(Lnet/minecraft/resources/Identifier;)Lcom/mojang/blaze3d/pipeline/RenderPipeline$Builder;"
+                "Lcom/mojang/renderpearl/api/pipeline/RenderPipeline$Builder;withFragmentShader(Lnet/minecraft/resources/Identifier;)Lcom/mojang/renderpearl/api/pipeline/RenderPipeline$Builder;"
         ),
         index = 0,
         remap = false

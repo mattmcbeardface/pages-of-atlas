@@ -1,13 +1,19 @@
 package com.pagesofatlas.mixin;
 
-import com.mojang.blaze3d.systems.RenderPass;
-import com.mojang.blaze3d.textures.GpuSampler;
-import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.renderpearl.api.commands.RenderPass;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.textures.GpuSampler;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
 
+import com.pagesofatlas.PagesOfAtlasRenderPipelines;
 import com.pagesofatlas.PagesOfAtlasRegistry;
+import com.pagesofatlas.PagesOfAtlasVirtualAtlas;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.chunk.ChunkSectionsToRender;
+import net.minecraft.client.renderer.oit.OitPipelineSet;
+import net.minecraft.client.renderer.oit.OitStage;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.renderer.texture.TextureManager;
@@ -20,10 +26,55 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 public abstract class ChunkSectionsToRenderMixin {
 
     @Redirect(
-        method = "renderGroup",
+        method = "renderOit",
         at = @At(
             value = "INVOKE",
-            target = "Lcom/mojang/blaze3d/systems/RenderPass;bindTexture(Ljava/lang/String;Lcom/mojang/blaze3d/textures/GpuTextureView;Lcom/mojang/blaze3d/textures/GpuSampler;)V",
+            target = "Lnet/minecraft/client/renderer/oit/OitPipelineSet;getPipeline(Lnet/minecraft/client/renderer/oit/OitStage;)Lcom/mojang/renderpearl/api/pipeline/RenderPipeline;"
+        )
+    )
+    private RenderPipeline pagesofatlas$oitPipeline(
+        OitPipelineSet original,
+        OitStage stage
+    ) {
+        boolean splitActive =
+            PagesOfAtlasRegistry
+                .plan(TextureAtlas.LOCATION_BLOCKS)
+                .map(plan -> plan.pageCount() > 1)
+                .orElse(false);
+
+        if (!splitActive) {
+            return original.getPipeline(stage);
+        }
+
+        boolean multiDraw =
+            original == RenderPipelines.OIT_TERRAIN_MULTIDRAW;
+
+        OitPipelineSet replacement;
+
+        if (PagesOfAtlasVirtualAtlas.active()) {
+            replacement =
+                multiDraw
+                    ? PagesOfAtlasRenderPipelines
+                        .VIRTUAL_OIT_TERRAIN_MULTIDRAW
+                    : PagesOfAtlasRenderPipelines
+                        .VIRTUAL_OIT_TERRAIN;
+        } else {
+            replacement =
+                multiDraw
+                    ? PagesOfAtlasRenderPipelines
+                        .OIT_TERRAIN_MULTIDRAW
+                    : PagesOfAtlasRenderPipelines
+                        .OIT_TERRAIN;
+        }
+
+        return replacement.getPipeline(stage);
+    }
+
+    @Redirect(
+        method = "renderLayers",
+        at = @At(
+            value = "INVOKE",
+            target = "Lcom/mojang/renderpearl/api/commands/RenderPass;setUniform(Ljava/lang/String;Lcom/mojang/renderpearl/api/textures/GpuTextureView;Lcom/mojang/renderpearl/api/textures/GpuSampler;)V",
             ordinal = 0
         )
     )
@@ -36,7 +87,7 @@ public abstract class ChunkSectionsToRenderMixin {
         /*
          * Vanilla block atlas.
          */
-        renderPass.bindTexture(
+        renderPass.setUniform(
             name,
             pageZero,
             sampler
@@ -115,7 +166,7 @@ public abstract class ChunkSectionsToRenderMixin {
         GpuSampler sampler
     ) {
         if (pageNumber >= plan.pageCount()) {
-            renderPass.bindTexture(
+            renderPass.setUniform(
                 samplerName,
                 fallback,
                 sampler
@@ -133,7 +184,7 @@ public abstract class ChunkSectionsToRenderMixin {
                     )
             );
 
-        renderPass.bindTexture(
+        renderPass.setUniform(
             samplerName,
             pageTexture.getTextureView(),
             sampler

@@ -22,11 +22,11 @@
   ],
   "depends": {
     "fabricloader": ">=0.19.3",
-    "minecraft": "~26.2",
+    "minecraft": "~26.3",
     "java": ">=25",
-    "fabric-api": ">=0.156.0",
-    "iris": ">=1.11.2",
-    "sodium": ">=0.9.1"
+    "fabric-api": ">=0.161.0",
+    "iris": ">=1.11.7",
+    "sodium": ">=0.9.3-alpha.1"
   },
   "accessWidener": "pagesofatlas.accesswidener",
   "icon": "assets/pagesofatlas/icon.png"

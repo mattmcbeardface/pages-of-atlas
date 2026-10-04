@@ -63,6 +63,24 @@ a production virtual-atlas architecture for oversized resource packs.
 Validated on Minecraft 26.2 with high-resolution Patrix resource packs,
 Sodium, Iris, Continuity, Photon, Solas, and Complementary / Unbound.
 
+### Minecraft 26.3
+
+The Minecraft 26.3 build ports the 0.4.0 virtual-atlas renderer to the new
+RenderPearl rendering backend.
+
+- Updated GPU texture, render-pass, pipeline, and bind-group integration for
+  RenderPearl.
+- Added Minecraft 26.3 multidraw terrain support.
+- Added 26.3 OIT/translucency rendering support.
+- Updated Sodium integration for 0.9.3-alpha.1.
+- Updated Iris integration for 1.11.7.
+- Updated Fabric Renderer API integration for Minecraft 26.3.
+- Updated item rendering for the 26.3 vertex format, including UV3 forwarding.
+- Removed the obsolete manual OpenGL sampler-unit remapping; RenderPearl now
+  manages sampler bindings directly.
+- Validated with Patrix, Photon/POM, Solas, Complementary / Unbound, and
+  Shrimple.
+
 ## [0.3.15] - 2026-09-07
 
 ### Fixed
@@ -147,7 +165,7 @@ Sodium, Iris, Continuity, Photon, Solas, and Complementary / Unbound.
 - Targets Minecraft 26.2, Fabric Loader 0.19.3 or newer, Fabric API 0.156.0 or
   newer, and Java 25.
 
-[0.4.0]: https://github.com/mattmcbeardface/pages-of-atlas/releases/tag/v0.4.0-26.2
+[0.4.0]: https://github.com/mattmcbeardface/pages-of-atlas/releases/tag/v0.4.0-26.3
 [0.3.15]: https://github.com/mattmcbeardface/pages-of-atlas/releases/tag/v0.3.15
 [0.3.14]: https://github.com/mattmcbeardface/pages-of-atlas/releases/tag/v0.3.14
 [0.3.13]: https://github.com/mattmcbeardface/pages-of-atlas/releases/tag/v0.3.13

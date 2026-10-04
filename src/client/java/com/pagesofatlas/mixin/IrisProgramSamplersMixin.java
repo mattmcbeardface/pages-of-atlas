@@ -19,8 +19,8 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
  * gaux4, depthtex*, shadow textures, etc.
  *
  * Reserve the last three fragment texture units inside Iris'
- * allocator. GlProgramMixin assigns the PagesOfAtlas page samplers
- * to exactly these same three units.
+ * allocator so Iris cannot allocate unrelated shader-pack samplers
+ * into the units used by PagesOfAtlas overflow-page textures.
  */
 @Pseudo
 @Mixin(

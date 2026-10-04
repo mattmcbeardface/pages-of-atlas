@@ -11,7 +11,7 @@ import net.fabricmc.fabric.api.client.renderer.v1.mesh.QuadView;
 
 import net.minecraft.client.model.geom.builders.UVPair;
 import net.minecraft.client.renderer.Sheets;
-import net.minecraft.client.renderer.rendertype.OutputTarget;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.texture.TextureAtlas;
@@ -348,6 +348,15 @@ public final class PagesOfAtlasItemRendering {
             }
 
             @Override
+            public VertexConsumer setUv3(
+                float u,
+                float v
+            ) {
+                original.setUv3(u, v);
+                return this;
+            }
+
+            @Override
             public VertexConsumer setNormal(
                 float x,
                 float y,
@@ -475,6 +484,15 @@ public final class PagesOfAtlasItemRendering {
         }
 
         @Override
+        public VertexConsumer setUv3(
+            float u,
+            float v
+        ) {
+            delegate.setUv3(u, v);
+            return this;
+        }
+
+        @Override
         public VertexConsumer setNormal(
             float x,
             float y,
@@ -519,8 +537,8 @@ public final class PagesOfAtlasItemRendering {
 
         if (key.translucent()) {
             setup
-                .setOutputTarget(
-                    OutputTarget.ITEM_ENTITY_TARGET
+                .setOitPipelines(
+                    RenderPipelines.OIT_ITEM
                 )
                 .sortOnUpload();
         }
