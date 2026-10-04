@@ -27,6 +27,7 @@
     "IrisPipelinesMixin",
     "SodiumShaderChunkRendererMixin",
     "SodiumDefaultChunkRendererMixin",
+    "MinecraftFrameMixin",
     "ItemFeatureRendererMixin",
     "IrisProgramSamplersMixin"
   ],

@@ -499,6 +499,9 @@ public final class PagesOfAtlasRenderPipelines {
                     "ALPHA_CUTOUT",
                     0.1F
                 )
+                .withColorTargetState(
+                    ColorTargetState.DEFAULT
+                )
                 .build()
         );
 

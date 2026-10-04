@@ -4,7 +4,6 @@ import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.renderpearl.api.textures.GpuSampler;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 
-import com.pagesofatlas.PagesOfAtlasIrisPbrCompat;
 import com.pagesofatlas.PagesOfAtlasPbrDemand;
 import com.pagesofatlas.PagesOfAtlasPbrPages;
 import com.pagesofatlas.PagesOfAtlasRegistry;
@@ -19,8 +18,6 @@ import org.spongepowered.asm.mixin.Pseudo;
 
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Pseudo
 @Mixin(
@@ -208,60 +205,6 @@ public abstract class SodiumDefaultChunkRendererMixin {
         );
     }
 
-    /*
-     * Sodium's bytecode closes the terrain RenderPass before render()
-     * returns.
-     *
-     * This is therefore the safe point to perform large GPU texture
-     * uploads requested during the frame.
-     */
-    @Inject(
-        method = "render",
-        at = @At("RETURN"),
-        remap = false
-    )
-    private void pagesofatlas$buildRequestedPbrPages(
-        CallbackInfo ci
-    ) {
-        boolean splitActive =
-            PagesOfAtlasRegistry
-                .plan(TextureAtlas.LOCATION_BLOCKS)
-                .map(plan ->
-                    plan.pageCount() > 1
-                )
-                .orElse(false);
-
-        if (!splitActive) {
-            return;
-        }
-
-        /*
-         * Iris rebuilt its pipeline without normals/specular.
-         *
-         * This executes after Sodium's active RenderPass has closed,
-         * so POA can safely destroy its overflow PBR textures.
-         */
-        if (
-            PagesOfAtlasPbrDemand.consumeClearRequested()
-        ) {
-            /*
-             * Shader reload boundary:
-             *
-             * Release both POA overflow PBR pages and Iris's native
-             * page-zero normal/specular atlases. Otherwise Iris keeps
-             * the old blocks_n / blocks_s textures resident even
-             * though the new pipeline no longer requires PBR.
-             */
-            PagesOfAtlasPbrPages.clear();
-            PagesOfAtlasIrisPbrCompat.clear();
-        }
-
-        if (!PagesOfAtlasPbrDemand.required()) {
-            return;
-        }
-
-        PagesOfAtlasPbrPages.buildRequestedPages();
-    }
 
     private static void pagesofatlas$bindPbrPage(
         RenderPass renderPass,
